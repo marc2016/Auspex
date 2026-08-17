@@ -1,22 +1,22 @@
 /**
  * The type of a node in the analysis tree hierarchy:
- * folder -> namespace/package -> file -> method
+ * folder -> namespace/package -> file -> class -> method
  */
-export type NodeType = 'folder' | 'namespace' | 'file' | 'method';
+export type NodeType = 'folder' | 'namespace' | 'class' | 'file' | 'method';
 
 /**
  * A single node in the hierarchical analysis tree.
  * Used directly by the ECharts Treemap as input data.
  */
 export interface TreeNode {
-  /** Display name (folder name, filename, method name, etc.) */
+  /** Display name (folder name, filename, class name, method name, etc.) */
   name: string;
   /** Relative path from repository root */
   path: string;
   type: NodeType;
   /**
    * The "size" value for treemap tile sizing.
-   * For methods/files: Lines of Code (LOC).
+   * For methods/classes/files: Lines of Code (LOC).
    * For folders/namespaces: sum of all child LOC.
    */
   value: number;
@@ -32,11 +32,15 @@ export interface TreeNode {
    * 0 = very stable (green), 1 = high churn hotspot (red).
    */
   churnScore: number;
-  /** Start line in source file (methods only) */
+  /** Start line in source file (methods & classes) */
   startLine?: number;
-  /** End line in source file (methods only) */
+  /** End line in source file (methods & classes) */
   endLine?: number;
-  /** Child nodes (folders contain files, files contain methods, etc.) */
+  /** Enclosing file path (useful when viewing flat methods/classes) */
+  filePath?: string;
+  /** Enclosing class name (for methods) */
+  className?: string;
+  /** Child nodes (folders contain files, files contain classes/methods, etc.) */
   children?: TreeNode[];
 }
 

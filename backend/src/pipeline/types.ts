@@ -31,13 +31,17 @@ export interface PipelineContext {
   /** AbortController signal for cancellation support */
   signal: AbortSignal;
   /** Progress reporter – each stage calls this to push WS updates */
-  reportProgress: (stage: string, message: string, percent: number, filesProcessed?: number, totalFiles?: number) => void;
+  reportProgress: (
+    stage: string,
+    message: string,
+    percent: number,
+    filesProcessed?: number,
+    totalFiles?: number
+  ) => void;
 }
 
 /**
  * A single stage in the analysis pipeline.
- * Stages are executed sequentially; each one receives and returns the same context.
- * Following the Open-Closed Principle: add new stages without changing existing ones.
  */
 export interface PipelineStage {
   readonly name: string;
@@ -52,6 +56,18 @@ export interface MethodInfo {
   startLine: number;
   endLine: number;
   loc: number;
+  className?: string;
+}
+
+/**
+ * Metadata about a parsed class/interface/struct extracted from AST.
+ */
+export interface ClassInfo {
+  name: string;
+  startLine: number;
+  endLine: number;
+  loc: number;
+  methods: MethodInfo[];
 }
 
 /**
@@ -62,6 +78,7 @@ export interface ParsedFileInfo {
   filePath: string;
   namespace?: string;
   loc: number;
+  classes: ClassInfo[];
   methods: MethodInfo[];
   /** SHA256 hash of the file contents – used for cache invalidation */
   fileHash: string;

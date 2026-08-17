@@ -7,8 +7,8 @@ import { v4 as uuidv4 } from 'uuid';
 /**
  * Stage 04: Tree Aggregator
  *
- * Builds the final 4-level hierarchical JSON tree:
- *   Folder -> Namespace/Package -> File (with commit count) -> Method (with LOC)
+ * Builds the final hierarchical JSON tree:
+ *   Folder -> Namespace/Package -> File -> Class (if any) -> Method (with LOC)
  *
  * Also normalizes churn scores (0.0–1.0) across all nodes,
  * then persists the result as a new scan_snapshot in SQLite.
@@ -27,14 +27,11 @@ export class TreeAggregatorStage implements PipelineStage {
       throw new Error('No parsed files available for tree aggregation.');
     }
 
-    // Build folder/namespace/file/method tree
     const root = this.buildTree(parsedFiles, ctx);
 
-    // Normalize churn scores across the entire tree
     const maxCommits = this.getMaxCommitCount(parsedFiles, ctx);
     this.normalizeChurn(root, maxCommits);
 
-    // Calculate totals
     ctx.totalLoc = parsedFiles.reduce((sum, f) => sum + f.loc, 0);
     ctx.tree = root;
 
@@ -130,17 +127,55 @@ export class TreeAggregatorStage implements PipelineStage {
         targetParent = nsNode;
       }
 
-      const methodNodes: TreeNode[] = file.methods.map((m) => ({
-        name: m.name,
-        path: `${file.filePath}#${m.name}`,
-        type: 'method' as const,
-        value: m.loc,
-        loc: m.loc,
-        commitCount,
-        churnScore: 0,
-        startLine: m.startLine,
-        endLine: m.endLine,
-      }));
+      // Build classes and methods under the file
+      const fileChildren: TreeNode[] = [];
+      const classMap = new Map<string, TreeNode>();
+
+      if (file.classes && file.classes.length > 0) {
+        for (const cls of file.classes) {
+          const classNode: TreeNode = {
+            name: cls.name,
+            path: `${file.filePath}#${cls.name}`,
+            type: 'class',
+            value: cls.loc,
+            loc: cls.loc,
+            commitCount,
+            churnScore: 0,
+            startLine: cls.startLine,
+            endLine: cls.endLine,
+            filePath: file.filePath,
+            children: [],
+          };
+          classMap.set(cls.name, classNode);
+          fileChildren.push(classNode);
+        }
+      }
+
+      for (const m of file.methods) {
+        const methodNode: TreeNode = {
+          name: m.name,
+          path: m.className
+            ? `${file.filePath}#${m.className}.${m.name}`
+            : `${file.filePath}#${m.name}`,
+          type: 'method',
+          value: m.loc,
+          loc: m.loc,
+          commitCount,
+          churnScore: 0,
+          startLine: m.startLine,
+          endLine: m.endLine,
+          filePath: file.filePath,
+          className: m.className,
+        };
+
+        if (m.className && classMap.has(m.className)) {
+          const parentCls = classMap.get(m.className)!;
+          if (!parentCls.children) parentCls.children = [];
+          parentCls.children.push(methodNode);
+        } else {
+          fileChildren.push(methodNode);
+        }
+      }
 
       const fileNode: TreeNode = {
         name: path.basename(file.filePath),
@@ -150,7 +185,8 @@ export class TreeAggregatorStage implements PipelineStage {
         loc: file.loc,
         commitCount,
         churnScore: 0,
-        children: methodNodes.length > 0 ? methodNodes : undefined,
+        filePath: file.filePath,
+        children: fileChildren.length > 0 ? fileChildren : undefined,
       };
 
       if (!targetParent.children) {
@@ -174,12 +210,15 @@ export class TreeAggregatorStage implements PipelineStage {
       total += this.aggregateLoc(child);
       totalCommits += child.commitCount;
     }
-    node.loc = total;
-    node.value = total;
+    // If not a leaf with own LOC, sum child LOCs
     if (node.type === 'folder' || node.type === 'namespace') {
+      node.loc = total;
+      node.value = total;
       node.commitCount = totalCommits;
+    } else {
+      node.value = node.loc;
     }
-    return total;
+    return node.loc;
   }
 
   private getMaxCommitCount(files: ParsedFileInfo[], ctx: PipelineContext): number {
@@ -217,10 +256,9 @@ export class TreeAggregatorStage implements PipelineStage {
       ctx.totalFiles,
       ctx.totalLoc,
       JSON.stringify(tree),
-      durationMs,
+      durationMs
     );
 
-    // Update commit counts in file_cache
     const updateStmt = db.prepare(`
       UPDATE file_cache SET commit_count = ? WHERE repo_id = ? AND file_path = ?
     `);

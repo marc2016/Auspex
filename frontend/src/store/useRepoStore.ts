@@ -18,6 +18,8 @@ interface ScanProgress {
   totalFiles?: number;
 }
 
+export type Theme = 'dark' | 'light';
+
 interface RepoStore {
   // Repository list
   repositories: RepoListItem[];
@@ -44,9 +46,19 @@ interface RepoStore {
   // UI state
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  theme: Theme;
+  toggleTheme: () => void;
 }
 
 const API_BASE = '/api';
+
+const initialTheme = (typeof window !== 'undefined'
+  ? (localStorage.getItem('auspex_theme') as Theme) || 'dark'
+  : 'dark') as Theme;
+
+if (typeof document !== 'undefined') {
+  document.documentElement.setAttribute('data-theme', initialTheme);
+}
 
 export const useRepoStore = create<RepoStore>((set, get) => ({
   repositories: [],
@@ -56,7 +68,7 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
     try {
       const res = await fetch(`${API_BASE}/repositories`);
       if (res.ok) {
-        const data = (await res.json());
+        const data = await res.json();
         if (Array.isArray(data)) {
           set({ repositories: data });
         }
@@ -112,4 +124,16 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
 
   sidebarCollapsed: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+
+  theme: initialTheme,
+  toggleTheme: () => {
+    const nextTheme: Theme = get().theme === 'dark' ? 'light' : 'dark';
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('auspex_theme', nextTheme);
+    }
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', nextTheme);
+    }
+    set({ theme: nextTheme });
+  },
 }));

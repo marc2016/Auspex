@@ -8,6 +8,8 @@ import {
   ChevronRight,
   Activity,
   Telescope,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useRepoStore } from '../../store/useRepoStore';
 import { clsx } from 'clsx';
@@ -22,8 +24,15 @@ const NAV_ITEMS = [
 ];
 
 export function Sidebar() {
-  const { repositories, activeRepoId, setActiveRepoId, sidebarCollapsed, toggleSidebar } =
-    useRepoStore();
+  const {
+    repositories,
+    activeRepoId,
+    setActiveRepoId,
+    sidebarCollapsed,
+    toggleSidebar,
+    theme,
+    toggleTheme,
+  } = useRepoStore();
   const navigate = useNavigate();
   const [wsConnected, setWsConnected] = useState(false);
 
@@ -34,7 +43,6 @@ export function Sidebar() {
   }, []);
 
   const repoList = Array.isArray(repositories) ? repositories : [];
-  const activeRepo = repoList.find((r) => r.id === activeRepoId);
 
   return (
     <aside
@@ -51,11 +59,11 @@ export function Sidebar() {
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
         <div
-          className="flex items-center justify-center rounded-lg shrink-0"
+          className="flex items-center justify-center rounded-lg shrink-0 shadow-sm"
           style={{
             width: 36,
             height: 36,
-            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
           }}
         >
           <Telescope size={20} color="white" />
@@ -111,7 +119,6 @@ export function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 px-2 py-3 flex flex-col gap-1">
         {NAV_ITEMS.map(({ to, icon: Icon, label, end }) => {
-          // For repo-specific routes, use active repo ID
           const resolvedTo =
             (to === '/treemap' || to === '/hotspots') && activeRepoId
               ? `/repo/${activeRepoId}${to}`
@@ -132,6 +139,7 @@ export function Sidebar() {
               style={({ isActive }) => ({
                 backgroundColor: isActive ? 'var(--color-accent-subtle)' : 'transparent',
                 color: isActive ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                fontWeight: isActive ? 600 : 400,
                 textDecoration: 'none',
               })}
             >
@@ -144,17 +152,46 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Footer: WS status + Collapse toggle */}
+      {/* Footer: Theme Toggle + WS status + Collapse toggle */}
       <div
         className="px-3 py-3 flex flex-col gap-2"
         style={{ borderTop: '1px solid var(--color-border)' }}
       >
+        {/* Theme Toggle (Light / Dark) */}
+        <button
+          onClick={toggleTheme}
+          className="flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors duration-150 cursor-pointer"
+          style={{
+            background: 'var(--color-surface-elevated)',
+            border: '1px solid var(--color-border)',
+            color: 'var(--color-text-primary)',
+            width: '100%',
+          }}
+          title={theme === 'dark' ? 'Zum hellen Modus wechseln' : 'Zum dunklen Modus wechseln'}
+        >
+          <div className="flex items-center gap-2">
+            {theme === 'dark' ? (
+              <Sun size={16} color="#f59e0b" />
+            ) : (
+              <Moon size={16} color="var(--color-accent)" />
+            )}
+            {!sidebarCollapsed && (
+              <span style={{ fontSize: 13, fontWeight: 500 }}>
+                {theme === 'dark' ? 'Heller Modus' : 'Dunkler Modus'}
+              </span>
+            )}
+          </div>
+        </button>
+
         {/* WebSocket status */}
         {!sidebarCollapsed && (
           <div className="flex items-center gap-2 px-1">
-            <Activity size={13} color={wsConnected ? 'var(--color-success)' : 'var(--color-danger)'} />
+            <Activity
+              size={13}
+              color={wsConnected ? 'var(--color-success)' : 'var(--color-danger)'}
+            />
             <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-              {wsConnected ? 'Live' : 'Disconnected'}
+              {wsConnected ? 'Live verbunden' : 'Getrennt'}
             </span>
           </div>
         )}
@@ -173,7 +210,7 @@ export function Sidebar() {
         >
           {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
           {!sidebarCollapsed && (
-            <span style={{ marginLeft: 8, fontSize: 13 }}>Collapse</span>
+            <span style={{ marginLeft: 8, fontSize: 13 }}>Sidebar einklappen</span>
           )}
         </button>
       </div>
