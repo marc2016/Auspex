@@ -5,15 +5,19 @@ import { useMemo } from 'react';
 import { useRepoStore } from '../../store/useRepoStore';
 
 export type TreemapViewMode = 'files' | 'classes' | 'functions' | 'hierarchy';
+export type SizeMetric = 'loc' | 'churn';
+export type ColorMetric = 'churn' | 'loc';
 
 interface Props {
   tree: TreeNode;
   viewMode?: TreemapViewMode;
+  sizeMetric?: SizeMetric;
+  colorMetric?: ColorMetric;
   onNodeClick?: (node: TreeNode) => void;
 }
 
 /**
- * Calculates a smooth, modern heat color for churn:
+ * Calculates a smooth heat color based on churn score:
  * Low churn (0.0): #22c55e (vibrant green)
  * Medium churn (0.5): #eab308 (warm amber)
  * High churn (1.0): #ef4444 (hotspot red)
@@ -38,12 +42,55 @@ function getChurnColor(score: number, isLight: boolean): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function toEChartsData(node: TreeNode, isFlat: boolean, isLight: boolean): unknown {
-  const color = getChurnColor(node.churnScore, isLight);
+/**
+ * Calculates color based on LOC size:
+ * Small (0.0): Indigo/Blue
+ * Medium (0.5): Purple
+ * Large (1.0): Magenta/Pink
+ */
+function getLocColor(loc: number, maxLoc: number, isLight: boolean): string {
+  const ratio = Math.max(0, Math.min(loc / Math.max(maxLoc, 1), 1));
+  const r = Math.round(79 + ratio * (217 - 79));
+  const g = Math.round(70 + (1 - ratio) * (140 - 70));
+  const b = Math.round(229 + ratio * (150 - 229));
+  const alpha = isLight ? 0.78 : 0.84;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function getMaxLoc(node: TreeNode): number {
+  let max = node.loc || 1;
+  function traverse(n: TreeNode) {
+    if (n.loc > max) max = n.loc;
+    if (n.children) {
+      for (const c of n.children) traverse(c);
+    }
+  }
+  traverse(node);
+  return max;
+}
+
+function toEChartsData(
+  node: TreeNode,
+  isFlat: boolean,
+  isLight: boolean,
+  sizeMetric: SizeMetric,
+  colorMetric: ColorMetric,
+  maxLoc: number
+): unknown {
+  const color =
+    colorMetric === 'loc'
+      ? getLocColor(node.loc, maxLoc, isLight)
+      : getChurnColor(node.churnScore, isLight);
+
+  // Size value: either LOC or commitCount (minimum 1 to be visible)
+  const sizeValue =
+    sizeMetric === 'churn'
+      ? Math.max(node.commitCount, 1)
+      : node.value || node.loc || 1;
 
   const item: Record<string, unknown> = {
     name: node.name,
-    value: node.value || node.loc || 1,
+    value: sizeValue,
     path: node.path,
     type: node.type,
     loc: node.loc,
@@ -62,13 +109,15 @@ function toEChartsData(node: TreeNode, isFlat: boolean, isLight: boolean): unkno
   };
 
   if (!isFlat && node.children && node.children.length > 0) {
-    item.children = node.children.map((c) => toEChartsData(c, false, isLight));
+    item.children = node.children.map((c) =>
+      toEChartsData(c, false, isLight, sizeMetric, colorMetric, maxLoc)
+    );
   }
 
   return item;
 }
 
-function flattenTreeToFiles(node: TreeNode): TreeNode[] {
+function flattenTreeToFiles(node: TreeNode, sizeMetric: SizeMetric): TreeNode[] {
   const files: TreeNode[] = [];
   function traverse(n: TreeNode) {
     if (n.type === 'file') {
@@ -78,10 +127,12 @@ function flattenTreeToFiles(node: TreeNode): TreeNode[] {
     }
   }
   traverse(node);
-  return files.sort((a, b) => b.loc - a.loc);
+  return files.sort((a, b) =>
+    sizeMetric === 'churn' ? b.commitCount - a.commitCount : b.loc - a.loc
+  );
 }
 
-function flattenTreeToClasses(node: TreeNode): TreeNode[] {
+function flattenTreeToClasses(node: TreeNode, sizeMetric: SizeMetric): TreeNode[] {
   const classes: TreeNode[] = [];
   function traverse(n: TreeNode) {
     if (n.type === 'class') {
@@ -93,17 +144,19 @@ function flattenTreeToClasses(node: TreeNode): TreeNode[] {
           for (const child of n.children) traverse(child);
         }
       } else {
-        classes.push({ ...n, name: `${n.name} (module)` });
+        classes.push({ ...n, name: `${n.name} (Modul)` });
       }
     } else if (n.children) {
       for (const child of n.children) traverse(child);
     }
   }
   traverse(node);
-  return classes.sort((a, b) => b.loc - a.loc);
+  return classes.sort((a, b) =>
+    sizeMetric === 'churn' ? b.commitCount - a.commitCount : b.loc - a.loc
+  );
 }
 
-function flattenTreeToFunctions(node: TreeNode): TreeNode[] {
+function flattenTreeToFunctions(node: TreeNode, sizeMetric: SizeMetric): TreeNode[] {
   const functions: TreeNode[] = [];
   function traverse(n: TreeNode, currentFilePath?: string) {
     const file = n.filePath || (n.type === 'file' ? n.path : currentFilePath);
@@ -114,34 +167,50 @@ function flattenTreeToFunctions(node: TreeNode): TreeNode[] {
     }
   }
   traverse(node);
-  return functions.sort((a, b) => b.loc - a.loc);
+  return functions.sort((a, b) =>
+    sizeMetric === 'churn' ? b.commitCount - a.commitCount : b.loc - a.loc
+  );
 }
 
-export function TreemapViewer({ tree, viewMode = 'files', onNodeClick }: Props) {
+export function TreemapViewer({
+  tree,
+  viewMode = 'files',
+  sizeMetric = 'loc',
+  colorMetric = 'churn',
+  onNodeClick,
+}: Props) {
   const theme = useRepoStore((s) => s.theme);
   const isLight = theme === 'light';
   const isHierarchy = viewMode === 'hierarchy';
 
+  const maxLoc = useMemo(() => getMaxLoc(tree), [tree]);
+
   const chartData = useMemo(() => {
     switch (viewMode) {
       case 'classes': {
-        const classes = flattenTreeToClasses(tree);
-        return classes.map((c) => toEChartsData(c, true, isLight));
+        const classes = flattenTreeToClasses(tree, sizeMetric);
+        return classes.map((c) =>
+          toEChartsData(c, true, isLight, sizeMetric, colorMetric, maxLoc)
+        );
       }
       case 'functions': {
-        const fns = flattenTreeToFunctions(tree);
-        return fns.map((f) => toEChartsData(f, true, isLight));
+        const fns = flattenTreeToFunctions(tree, sizeMetric);
+        return fns.map((f) =>
+          toEChartsData(f, true, isLight, sizeMetric, colorMetric, maxLoc)
+        );
       }
       case 'hierarchy': {
-        return [toEChartsData(tree, false, isLight)];
+        return [toEChartsData(tree, false, isLight, sizeMetric, colorMetric, maxLoc)];
       }
       case 'files':
       default: {
-        const files = flattenTreeToFiles(tree);
-        return files.map((f) => toEChartsData(f, true, isLight));
+        const files = flattenTreeToFiles(tree, sizeMetric);
+        return files.map((f) =>
+          toEChartsData(f, true, isLight, sizeMetric, colorMetric, maxLoc)
+        );
       }
     }
-  }, [tree, viewMode, isLight]);
+  }, [tree, viewMode, isLight, sizeMetric, colorMetric, maxLoc]);
 
   const option = useMemo<EChartsOption>(
     () => ({
@@ -169,26 +238,26 @@ export function TreemapViewer({ tree, viewMode = 'files', onNodeClick }: Props) 
 
           const typeLabel =
             d.type === 'method'
-              ? '⚡ Function / Method'
+              ? 'Funktion / Methode'
               : d.type === 'class'
-              ? '🏛️ Class / Struct'
+              ? 'Klasse / Struct'
               : d.type === 'file'
-              ? '📄 File'
-              : '📁 Folder';
+              ? 'Datei'
+              : 'Ordner';
 
           const textColor = isLight ? '#0f172a' : '#ffffff';
           const mutedColor = isLight ? '#64748b' : '#8b95a8';
           const dividerColor = isLight ? '#f1f5f9' : '#252b3b';
 
           return `
-            <div style="font-family: Inter, sans-serif; min-width: 200px;">
+            <div style="font-family: Inter, sans-serif; min-width: 210px;">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                <span style="font-size: 11px; text-transform: uppercase; color: ${mutedColor}; letter-spacing: 0.05em;">
+                <span style="font-size: 11px; text-transform: uppercase; color: ${mutedColor}; font-weight: 600; letter-spacing: 0.05em;">
                   ${typeLabel}
                 </span>
                 ${
                   d.startLine
-                    ? `<span style="font-size: 11px; color: ${isLight ? '#4f46e5' : '#6366f1'}; font-weight: 500;">Lines ${d.startLine}–${d.endLine}</span>`
+                    ? `<span style="font-size: 11px; color: ${isLight ? '#4f46e5' : '#6366f1'}; font-weight: 500;">Zeilen ${d.startLine}–${d.endLine}</span>`
                     : ''
                 }
               </div>
@@ -197,13 +266,13 @@ export function TreemapViewer({ tree, viewMode = 'files', onNodeClick }: Props) 
               </div>
               ${
                 d.filePath
-                  ? `<div style="color: ${mutedColor}; font-size: 11px; margin-bottom: 8px; word-break: break-all;">📁 ${d.filePath}</div>`
+                  ? `<div style="color: ${mutedColor}; font-size: 11px; margin-bottom: 8px; word-break: break-all;">${d.filePath}</div>`
                   : d.path
                   ? `<div style="color: ${mutedColor}; font-size: 11px; margin-bottom: 8px; word-break: break-all;">${d.path}</div>`
                   : ''
               }
               <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px;">
-                <span style="color: ${mutedColor};">Size (LOC):</span>
+                <span style="color: ${mutedColor};">Dateigröße (LOC):</span>
                 <strong style="color: ${textColor};">${((d.loc as number) ?? 0).toLocaleString()}</strong>
               </div>
               <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px;">
@@ -221,7 +290,7 @@ export function TreemapViewer({ tree, viewMode = 'files', onNodeClick }: Props) 
       series: [
         {
           type: 'treemap',
-          data: chartData,
+          data: chartData as any,
           top: isHierarchy ? 38 : 0,
           bottom: 0,
           left: 0,
@@ -232,7 +301,7 @@ export function TreemapViewer({ tree, viewMode = 'files', onNodeClick }: Props) 
           nodeClick: isHierarchy ? 'zoomToNode' : false,
           leafDepth: isHierarchy ? 1 : undefined,
           drillDownIcon: '',
-          visibleMin: 250,
+          visibleMin: 220,
           breadcrumb: {
             show: isHierarchy,
             top: 4,
@@ -252,12 +321,28 @@ export function TreemapViewer({ tree, viewMode = 'files', onNodeClick }: Props) 
           },
           label: {
             show: true,
-            formatter: '{b}',
-            fontSize: 12,
-            fontWeight: 500,
-            color: '#ffffff',
-            textShadowColor: 'rgba(0, 0, 0, 0.55)',
-            textShadowBlur: 2,
+            formatter: (info: unknown) => {
+              const d = (info as { data: Record<string, unknown> }).data;
+              if (!d) return '';
+              const loc = d.loc != null ? `${d.loc} LOC` : '';
+              const commits = d.commitCount != null ? `${d.commitCount} Commits` : '';
+              return `{name|${d.name}}\n{metric|${loc} · ${commits}}`;
+            },
+            rich: {
+              name: {
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#ffffff',
+                lineHeight: 16,
+              },
+              metric: {
+                fontSize: 10,
+                color: 'rgba(255, 255, 255, 0.85)',
+                lineHeight: 14,
+              },
+            },
+            textShadowColor: 'rgba(0, 0, 0, 0.65)',
+            textShadowBlur: 3,
             fontFamily: 'Inter, sans-serif',
             overflow: 'truncate',
           },

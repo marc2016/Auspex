@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
+import { Icon } from '../components/common/Icon';
 import {
-  Plus,
-  FolderGit2,
-  RefreshCw,
-  Trash2,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Loader2,
-} from 'lucide-react';
+  mdiPlus,
+  mdiSourceRepository,
+  mdiRefresh,
+  mdiTrashCanOutline,
+  mdiCheckCircle,
+  mdiAlertCircleOutline,
+  mdiLoading,
+  mdiArrowRight,
+} from '@mdi/js';
 import { useRepoStore } from '../store/useRepoStore';
 import { wsClient } from '../services/websocket';
 import type {
@@ -118,11 +119,11 @@ export function RepositoryListPage() {
       if (!res.ok) {
         const data = await res.json();
         setScanActive(id, false);
-        setScanError(id, data.error || 'Failed to start scan.');
+        setScanError(id, data.error || 'Fehler beim Starten des Scans.');
       }
-    } catch (err) {
+    } catch {
       setScanActive(id, false);
-      setScanError(id, 'Network error when starting scan.');
+      setScanError(id, 'Netzwerkfehler beim Starten des Scans.');
     }
   };
 
@@ -141,7 +142,7 @@ export function RepositoryListPage() {
           </h1>
           <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginTop: 4 }}>
             {repositories.length}{' '}
-            {repositories.length === 1 ? 'repository' : 'repositories'} registered
+            {repositories.length === 1 ? 'Repository' : 'Repositories'} registriert
           </p>
         </div>
         <button
@@ -155,8 +156,8 @@ export function RepositoryListPage() {
             fontWeight: 500,
           }}
         >
-          <Plus size={16} />
-          Add Repository
+          <Icon path={mdiPlus} size={0.75} />
+          Repository hinzufügen
         </button>
       </div>
 
@@ -174,15 +175,15 @@ export function RepositoryListPage() {
               marginBottom: 16,
             }}
           >
-            Add Repository
+            Neues Repository anbinden
           </h2>
           <div className="flex flex-col gap-3">
             {[
-              { label: 'Name', key: 'name', placeholder: 'My Project' },
+              { label: 'Name', key: 'name', placeholder: 'Mein Projekt' },
               {
-                label: 'Path / URL',
+                label: 'Pfad oder Git-URL',
                 key: 'urlOrPath',
-                placeholder: '/path/to/repo or https://github.com/...',
+                placeholder: '/pfad/zum/repo oder https://github.com/...',
               },
             ].map(({ label, key, placeholder }) => (
               <div key={key}>
@@ -220,7 +221,7 @@ export function RepositoryListPage() {
                   onChange={(e) => setForm({ ...form, isRemote: e.target.checked })}
                 />
                 <span style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>
-                  Remote URL
+                  Remote-Repository (Git Clone)
                 </span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -230,7 +231,7 @@ export function RepositoryListPage() {
                   onChange={(e) => setForm({ ...form, shallowClone: e.target.checked })}
                 />
                 <span style={{ color: 'var(--color-text-secondary)', fontSize: 13 }}>
-                  Shallow Clone
+                  Shallow Clone (schneller)
                 </span>
               </label>
             </div>
@@ -247,7 +248,7 @@ export function RepositoryListPage() {
                   opacity: saving ? 0.7 : 1,
                 }}
               >
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? 'Speichern…' : 'Speichern'}
               </button>
               <button
                 onClick={() => {
@@ -262,7 +263,7 @@ export function RepositoryListPage() {
                   fontSize: 14,
                 }}
               >
-                Cancel
+                Abbrechen
               </button>
             </div>
           </div>
@@ -276,13 +277,14 @@ export function RepositoryListPage() {
             className="rounded-xl p-10 text-center"
             style={{ background: 'var(--color-surface)', border: '1px dashed var(--color-border)' }}
           >
-            <FolderGit2
-              size={32}
+            <Icon
+              path={mdiSourceRepository}
+              size={1.6}
               color="var(--color-text-muted)"
               style={{ margin: '0 auto 12px' }}
             />
             <p style={{ color: 'var(--color-text-muted)' }}>
-              No repositories yet. Add one to get started.
+              Noch keine Repositories registriert. Füge eines hinzu, um zu starten.
             </p>
           </div>
         )}
@@ -305,7 +307,7 @@ export function RepositoryListPage() {
                   className="flex items-center justify-center rounded-lg shrink-0"
                   style={{ width: 40, height: 40, background: 'var(--color-accent-subtle)' }}
                 >
-                  <FolderGit2 size={20} color="var(--color-accent)" />
+                  <Icon path={mdiSourceRepository} size={0.9} color="var(--color-accent)" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{repo.name}</p>
@@ -321,11 +323,11 @@ export function RepositoryListPage() {
                     {repo.urlOrPath}
                   </p>
                   {repo.lastScan && !isScanning && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <CheckCircle size={11} color="var(--color-success)" />
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Icon path={mdiCheckCircle} size={0.55} color="var(--color-success)" />
                       <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>
-                        {repo.lastScan.totalFiles} files ·{' '}
-                        {repo.lastScan.totalLoc.toLocaleString()} LOC ·{' '}
+                        {repo.lastScan.totalFiles} Dateien ·{' '}
+                        {repo.lastScan.totalLoc.toLocaleString()} LOC · Letzter Scan:{' '}
                         {new Date(repo.lastScan.scannedAt).toLocaleDateString()}
                       </span>
                     </div>
@@ -335,45 +337,50 @@ export function RepositoryListPage() {
                   {repo.lastScan && !isScanning && (
                     <button
                       onClick={() => handleOpen(repo.id)}
-                      className="rounded-lg px-3 py-1.5 cursor-pointer text-sm"
+                      className="flex items-center gap-1 rounded-lg px-3 py-1.5 cursor-pointer text-sm font-medium"
                       style={{
                         background: 'var(--color-accent-subtle)',
                         color: 'var(--color-accent)',
                         border: '1px solid var(--color-accent)40',
-                        fontWeight: 500,
                       }}
                     >
-                      Open
+                      Treemap
+                      <Icon path={mdiArrowRight} size={0.65} />
                     </button>
                   )}
                   <button
                     onClick={() => handleScan(repo.id)}
                     disabled={isScanning}
-                    className="rounded-lg p-2 cursor-pointer"
+                    className="rounded-lg p-2 cursor-pointer transition-colors"
                     style={{
                       background: 'var(--color-surface-elevated)',
                       color: 'var(--color-text-secondary)',
                       border: '1px solid var(--color-border)',
                     }}
-                    title={isScanning ? 'Scanning…' : 'Scan now'}
+                    title={isScanning ? 'Scan läuft…' : 'Jetzt scannen'}
                   >
                     {isScanning ? (
-                      <Loader2 size={16} color="var(--color-accent)" className="animate-spin" />
+                      <Icon
+                        path={mdiLoading}
+                        size={0.7}
+                        color="var(--color-accent)"
+                        className="animate-spin"
+                      />
                     ) : (
-                      <RefreshCw size={16} />
+                      <Icon path={mdiRefresh} size={0.7} />
                     )}
                   </button>
                   <button
                     onClick={() => handleDelete(repo.id)}
-                    className="rounded-lg p-2 cursor-pointer"
+                    className="rounded-lg p-2 cursor-pointer transition-colors"
                     style={{
                       background: 'var(--color-surface-elevated)',
                       color: 'var(--color-danger)',
                       border: '1px solid var(--color-border)',
                     }}
-                    title="Delete repository"
+                    title="Repository entfernen"
                   >
-                    <Trash2 size={16} />
+                    <Icon path={mdiTrashCanOutline} size={0.7} />
                   </button>
                 </div>
               </div>
@@ -420,9 +427,9 @@ export function RepositoryListPage() {
                     border: '1px solid rgba(239, 68, 68, 0.3)',
                   }}
                 >
-                  <AlertCircle size={16} color="var(--color-danger)" className="shrink-0" />
+                  <Icon path={mdiAlertCircleOutline} size={0.7} color="var(--color-danger)" />
                   <span style={{ color: 'var(--color-danger)', fontSize: 12 }}>
-                    Scan error: {error}
+                    Scan-Fehler: {error}
                   </span>
                 </div>
               )}

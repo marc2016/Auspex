@@ -1,19 +1,29 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useRepoStore } from '../store/useRepoStore';
-import { TreemapViewer, type TreemapViewMode } from '../components/treemap/TreemapViewer';
+import {
+  TreemapViewer,
+  type TreemapViewMode,
+  type SizeMetric,
+  type ColorMetric,
+} from '../components/treemap/TreemapViewer';
 import { TreemapDetailsPanel } from '../components/treemap/TreemapDetailsPanel';
 import type { TreeNode } from '@auspex/shared';
+import { Icon } from '../components/common/Icon';
 import {
-  ZoomIn,
-  Loader2,
-  BarChart3,
-  Code2,
-  FileCode,
-  Box,
-  Zap,
-  FolderTree,
-} from 'lucide-react';
+  mdiRefresh,
+  mdiChartBoxOutline,
+  mdiCodeTags,
+  mdiFileCodeOutline,
+  mdiCubeOutline,
+  mdiFunctionVariant,
+  mdiFileTree,
+  mdiRulerSquare,
+  mdiPaletteOutline,
+  mdiFire,
+  mdiLoading,
+  mdiArrowRight,
+} from '@mdi/js';
 import { wsClient } from '../services/websocket';
 import type { WsScanProgressPayload, WsScanCompletePayload } from '@auspex/shared';
 
@@ -74,6 +84,8 @@ export function TreemapPage() {
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
   const [treemapKey, setTreemapKey] = useState(0);
   const [viewMode, setViewMode] = useState<TreemapViewMode>('files');
+  const [sizeMetric, setSizeMetric] = useState<SizeMetric>('loc');
+  const [colorMetric, setColorMetric] = useState<ColorMetric>('churn');
   const [sourceCodeOnly, setSourceCodeOnly] = useState(true);
 
   useEffect(() => {
@@ -114,10 +126,10 @@ export function TreemapPage() {
   }, [snapshot, sourceCodeOnly]);
 
   const viewButtons = [
-    { id: 'files' as const, label: 'Dateien', icon: FileCode },
-    { id: 'classes' as const, label: 'Klassen', icon: Box },
-    { id: 'functions' as const, label: 'Funktionen', icon: Zap },
-    { id: 'hierarchy' as const, label: 'Ordnerbaum', icon: FolderTree },
+    { id: 'files' as const, label: 'Dateien', icon: mdiFileCodeOutline },
+    { id: 'classes' as const, label: 'Klassen', icon: mdiCubeOutline },
+    { id: 'functions' as const, label: 'Funktionen', icon: mdiFunctionVariant },
+    { id: 'hierarchy' as const, label: 'Ordnerbaum', icon: mdiFileTree },
   ];
 
   return (
@@ -148,7 +160,7 @@ export function TreemapPage() {
               border: '1px solid var(--color-border)',
             }}
           >
-            {viewButtons.map(({ id: btnId, label, icon: Icon }) => {
+            {viewButtons.map(({ id: btnId, label, icon: iconPath }) => {
               const active = viewMode === btnId;
               return (
                 <button
@@ -163,17 +175,69 @@ export function TreemapPage() {
                   }}
                   title={`Visualisierungsmodus: ${label}`}
                 >
-                  <Icon size={13} />
+                  <Icon path={iconPath} size={0.65} />
                   {label}
                 </button>
               );
             })}
           </div>
 
+          {/* Kachelgröße Selector */}
+          <div
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs"
+            style={{
+              background: 'var(--color-surface-elevated)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            <Icon path={mdiRulerSquare} size={0.65} color="var(--color-accent)" />
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Größe:</span>
+            <select
+              value={sizeMetric}
+              onChange={(e) => setSizeMetric(e.target.value as SizeMetric)}
+              className="bg-transparent text-xs cursor-pointer font-medium"
+              style={{
+                color: 'var(--color-text-primary)',
+                border: 'none',
+                outline: 'none',
+              }}
+            >
+              <option value="loc">Dateigröße (LOC)</option>
+              <option value="churn">Git-Commits</option>
+            </select>
+          </div>
+
+          {/* Kachelfarbe Selector */}
+          <div
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs"
+            style={{
+              background: 'var(--color-surface-elevated)',
+              border: '1px solid var(--color-border)',
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            <Icon path={mdiPaletteOutline} size={0.65} color="var(--color-warning)" />
+            <span style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>Farbe:</span>
+            <select
+              value={colorMetric}
+              onChange={(e) => setColorMetric(e.target.value as ColorMetric)}
+              className="bg-transparent text-xs cursor-pointer font-medium"
+              style={{
+                color: 'var(--color-text-primary)',
+                border: 'none',
+                outline: 'none',
+              }}
+            >
+              <option value="churn">Git-Churn (Hotspots)</option>
+              <option value="loc">Code-Umfang (LOC)</option>
+            </select>
+          </div>
+
           {/* Source code only toggle */}
           <button
             onClick={() => setSourceCodeOnly((prev) => !prev)}
-            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 cursor-pointer text-xs transition-colors duration-150"
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer text-xs transition-colors duration-150"
             style={{
               background: sourceCodeOnly ? 'var(--color-accent-subtle)' : 'var(--color-surface-elevated)',
               color: sourceCodeOnly ? 'var(--color-accent)' : 'var(--color-text-secondary)',
@@ -182,7 +246,7 @@ export function TreemapPage() {
             }}
             title="Nicht-Code-Dateien (z.B. Markdown, Configs) ein-/ausblenden"
           >
-            <Code2 size={13} />
+            <Icon path={mdiCodeTags} size={0.65} />
             {sourceCodeOnly ? 'Nur Code' : 'Alle Dateien'}
           </button>
 
@@ -194,8 +258,9 @@ export function TreemapPage() {
               color: 'var(--color-text-secondary)',
               border: '1px solid var(--color-border)',
             }}
+            title="Ansicht zurücksetzen"
           >
-            <ZoomIn size={13} />
+            <Icon path={mdiRefresh} size={0.65} />
             Reset
           </button>
         </div>
@@ -207,7 +272,7 @@ export function TreemapPage() {
           className="flex items-center gap-3 px-5 py-2"
           style={{ background: 'var(--color-accent-subtle)', borderBottom: '1px solid var(--color-accent)40' }}
         >
-          <Loader2 size={14} color="var(--color-accent)" className="animate-spin" />
+          <Icon path={mdiLoading} size={0.7} className="animate-spin" color="var(--color-accent)" />
           <span style={{ color: 'var(--color-accent)', fontSize: 13 }}>{progress.message}</span>
           <div
             className="flex-1 rounded-full overflow-hidden"
@@ -235,19 +300,80 @@ export function TreemapPage() {
               className="flex flex-col items-center justify-center h-full"
               style={{ color: 'var(--color-text-muted)' }}
             >
-              <BarChart3 size={48} style={{ marginBottom: 16, opacity: 0.4 }} />
+              <Icon path={mdiChartBoxOutline} size={2} style={{ marginBottom: 16, opacity: 0.4 }} />
               <p style={{ fontSize: 15, fontWeight: 500 }}>Keine Scandaten vorhanden.</p>
               <p style={{ fontSize: 13, marginTop: 6 }}>
                 Starte einen Scan in der Repositories-Übersicht.
               </p>
             </div>
           )}
+
+          {/* Active Metric Info Indicator Banner with Icons */}
+          {displayTree && (
+            <div
+              className="flex items-center justify-between px-3.5 py-2 rounded-lg mb-2 text-xs"
+              style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              <div className="flex items-center gap-4 flex-wrap">
+                {/* Size Metric */}
+                <div className="flex items-center gap-1.5">
+                  <Icon path={mdiRulerSquare} size={0.65} color="var(--color-accent)" />
+                  <span style={{ color: 'var(--color-text-muted)' }}>Kachelgröße:</span>
+                  <strong style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>
+                    {sizeMetric === 'loc' ? 'Dateigröße (LOC)' : 'Git-Commits (Änderungen)'}
+                  </strong>
+                </div>
+
+                <span style={{ color: 'var(--color-border)', userSelect: 'none' }}>|</span>
+
+                {/* Color Metric */}
+                <div className="flex items-center gap-1.5">
+                  <Icon path={mdiPaletteOutline} size={0.65} color="var(--color-warning)" />
+                  <span style={{ color: 'var(--color-text-muted)' }}>Kachelfarbe:</span>
+                  <strong style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>
+                    {colorMetric === 'churn' ? (
+                      <span className="inline-flex items-center gap-1">
+                        Git-Churn Hotspot
+                        <span className="inline-flex items-center gap-0.5 ml-1 font-normal" style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>
+                          (<span style={{ color: '#22c55e' }}>Grün</span>
+                          <Icon path={mdiArrowRight} size={0.45} />
+                          <span style={{ color: '#ef4444' }}>Rot</span>)
+                        </span>
+                      </span>
+                    ) : (
+                      'Code-Umfang (LOC)'
+                    )}
+                  </strong>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>Modus:</span>
+                <span
+                  className="rounded px-2 py-0.5 font-medium"
+                  style={{
+                    background: 'var(--color-accent-subtle)',
+                    color: 'var(--color-accent)',
+                    fontSize: 11,
+                  }}
+                >
+                  {viewButtons.find((b) => b.id === viewMode)?.label}
+                </span>
+              </div>
+            </div>
+          )}
+
           {displayTree && (
             <div style={{ flex: 1, position: 'relative' }}>
               <TreemapViewer
-                key={`${treemapKey}-${sourceCodeOnly}-${viewMode}`}
+                key={`${treemapKey}-${sourceCodeOnly}-${viewMode}-${sizeMetric}-${colorMetric}`}
                 tree={displayTree}
                 viewMode={viewMode}
+                sizeMetric={sizeMetric}
+                colorMetric={colorMetric}
                 onNodeClick={setSelectedNode}
               />
             </div>
@@ -263,21 +389,51 @@ export function TreemapPage() {
                 fontSize: 11,
               }}
             >
-              <span style={{ color: 'var(--color-text-muted)' }}>
-                Modus: <strong style={{ color: 'var(--color-text-primary)' }}>{viewButtons.find(b => b.id === viewMode)?.label}</strong> (Kachelgröße = LOC · Farbe = Git-Churn)
-              </span>
+              <div className="flex items-center gap-2">
+                <Icon path={mdiFire} size={0.65} color="var(--color-danger)" />
+                <span style={{ color: 'var(--color-text-muted)' }}>
+                  {colorMetric === 'churn' ? 'Git-Churn Hotspots' : 'Code-Größe (LOC)'}:
+                </span>
+              </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: '#22c55e' }} />
-                  <span style={{ color: 'var(--color-text-secondary)' }}>Stabil (wenig Churn)</span>
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: colorMetric === 'churn' ? '#22c55e' : '#4f46e5',
+                    }}
+                  />
+                  <span style={{ color: 'var(--color-text-secondary)' }}>
+                    {colorMetric === 'churn' ? 'Stabil (wenig Churn)' : 'Kompakt'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: '#eab308' }} />
-                  <span style={{ color: 'var(--color-text-secondary)' }}>Mittel</span>
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: colorMetric === 'churn' ? '#f59e0b' : '#9333ea',
+                    }}
+                  />
+                  <span style={{ color: 'var(--color-text-secondary)' }}>
+                    {colorMetric === 'churn' ? 'Mittel' : 'Mittelgroß'}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: '#ef4444' }} />
-                  <span style={{ color: 'var(--color-text-secondary)' }}>Hotspot (hoher Churn)</span>
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 2,
+                      background: colorMetric === 'churn' ? '#ef4444' : '#db2777',
+                    }}
+                  />
+                  <span style={{ color: 'var(--color-text-secondary)' }}>
+                    {colorMetric === 'churn' ? 'Hotspot (hoher Churn)' : 'Sehr groß'}
+                  </span>
                 </div>
               </div>
             </div>

@@ -1,26 +1,27 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import { Icon } from '../common/Icon';
 import {
-  FolderGit2,
-  Map,
-  Flame,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  Activity,
-  Telescope,
-  Sun,
-  Moon,
-} from 'lucide-react';
+  mdiSourceRepository,
+  mdiChartBox,
+  mdiFire,
+  mdiCog,
+  mdiChevronLeft,
+  mdiChevronRight,
+  mdiCircleSlice8,
+  mdiTelescope,
+  mdiWeatherSunny,
+  mdiWeatherNight,
+} from '@mdi/js';
 import { useRepoStore } from '../../store/useRepoStore';
 import { clsx } from 'clsx';
 import { wsClient } from '../../services/websocket';
 import { useEffect, useState } from 'react';
 
 const NAV_ITEMS = [
-  { to: '/', icon: FolderGit2, label: 'Repositories', end: true },
-  { to: '/treemap', icon: Map, label: 'Treemap', end: false },
-  { to: '/hotspots', icon: Flame, label: 'Hotspots', end: false },
-  { to: '/settings', icon: Settings, label: 'Settings', end: false },
+  { to: '/', icon: mdiSourceRepository, label: 'Repositories', end: true },
+  { to: '/treemap', icon: mdiChartBox, label: 'Treemap', end: false },
+  { to: '/hotspots', icon: mdiFire, label: 'Hotspots', end: false },
+  { to: '/settings', icon: mdiCog, label: 'Settings', end: false },
 ];
 
 export function Sidebar() {
@@ -66,7 +67,7 @@ export function Sidebar() {
             background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
           }}
         >
-          <Telescope size={20} color="white" />
+          <Icon path={mdiTelescope} size={0.9} color="white" />
         </div>
         {!sidebarCollapsed && (
           <div>
@@ -90,7 +91,7 @@ export function Sidebar() {
               letterSpacing: '0.05em',
             }}
           >
-            Active Repository
+            Aktives Repository
           </p>
           <select
             value={activeRepoId ?? ''}
@@ -106,7 +107,7 @@ export function Sidebar() {
               outline: 'none',
             }}
           >
-            <option value="">— Select repository —</option>
+            <option value="">— Repository wählen —</option>
             {repoList.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
@@ -118,7 +119,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-3 flex flex-col gap-1">
-        {NAV_ITEMS.map(({ to, icon: Icon, label, end }) => {
+        {NAV_ITEMS.map(({ to, icon: iconPath, label, end }) => {
           const resolvedTo =
             (to === '/treemap' || to === '/hotspots') && activeRepoId
               ? `/repo/${activeRepoId}${to}`
@@ -143,7 +144,7 @@ export function Sidebar() {
                 textDecoration: 'none',
               })}
             >
-              <Icon size={18} className="shrink-0" />
+              <Icon path={iconPath} size={0.8} className="shrink-0" />
               {!sidebarCollapsed && (
                 <span style={{ fontSize: 14, fontWeight: 500 }}>{label}</span>
               )}
@@ -170,11 +171,11 @@ export function Sidebar() {
           title={theme === 'dark' ? 'Zum hellen Modus wechseln' : 'Zum dunklen Modus wechseln'}
         >
           <div className="flex items-center gap-2">
-            {theme === 'dark' ? (
-              <Sun size={16} color="#f59e0b" />
-            ) : (
-              <Moon size={16} color="var(--color-accent)" />
-            )}
+            <Icon
+              path={theme === 'dark' ? mdiWeatherSunny : mdiWeatherNight}
+              size={0.75}
+              color={theme === 'dark' ? '#f59e0b' : 'var(--color-accent)'}
+            />
             {!sidebarCollapsed && (
               <span style={{ fontSize: 13, fontWeight: 500 }}>
                 {theme === 'dark' ? 'Heller Modus' : 'Dunkler Modus'}
@@ -186,8 +187,9 @@ export function Sidebar() {
         {/* WebSocket status */}
         {!sidebarCollapsed && (
           <div className="flex items-center gap-2 px-1">
-            <Activity
-              size={13}
+            <Icon
+              path={mdiCircleSlice8}
+              size={0.6}
               color={wsConnected ? 'var(--color-success)' : 'var(--color-danger)'}
             />
             <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
@@ -206,9 +208,12 @@ export function Sidebar() {
             color: 'var(--color-text-muted)',
             width: '100%',
           }}
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={sidebarCollapsed ? 'Sidebar ausklappen' : 'Sidebar einklappen'}
         >
-          {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          <Icon
+            path={sidebarCollapsed ? mdiChevronRight : mdiChevronLeft}
+            size={0.75}
+          />
           {!sidebarCollapsed && (
             <span style={{ marginLeft: 8, fontSize: 13 }}>Sidebar einklappen</span>
           )}
