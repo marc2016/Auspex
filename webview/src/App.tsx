@@ -7,6 +7,7 @@ import { WEBVIEW_STRINGS, useLanguage } from './i18n';
 import { Icon } from './components/Icon';
 import { mdiInformationOutline } from '@mdi/js';
 import type { AnalysisSnapshot, TreeNode, PipelineProgress } from '../../src/analyzer/types';
+import { type TimeframeOption, filterTreeByTimeframe } from './utils/timeframeFilter';
 
 const CODE_EXTENSIONS = new Set([
   'ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'java', 'cs', 'py', 'go', 'rs', 'c', 'cpp', 'h', 'hpp',
@@ -54,6 +55,7 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<TreemapViewMode>('files');
   const [sizeMetric, setSizeMetric] = useState<SizeMetric>('loc');
   const [colorMetric, setColorMetric] = useState<ColorMetric>('fixes');
+  const [timeframe, setTimeframe] = useState<TimeframeOption>('all');
   const [sourceCodeOnly, setSourceCodeOnly] = useState(true);
   const [maxItems, setMaxItems] = useState(100);
 
@@ -130,8 +132,31 @@ export const App: React.FC = () => {
 
   const displayTree = useMemo(() => {
     if (!snapshot?.tree) return null;
-    return sourceCodeOnly ? filterSourceCodeOnly(snapshot.tree) : snapshot.tree;
-  }, [snapshot, sourceCodeOnly]);
+    let tree = sourceCodeOnly ? (filterSourceCodeOnly(snapshot.tree) ?? snapshot.tree) : snapshot.tree;
+    if (timeframe !== 'all') {
+      tree = filterTreeByTimeframe(tree, timeframe);
+    }
+    return tree;
+  }, [snapshot, sourceCodeOnly, timeframe]);
+
+  // Keep selectedNode synchronized when timeframe changes
+  useEffect(() => {
+    if (!selectedNode || !displayTree) return;
+    function findInTree(n: TreeNode, targetPath: string): TreeNode | null {
+      if (n.path === targetPath) return n;
+      if (n.children) {
+        for (const child of n.children) {
+          const found = findInTree(child, targetPath);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+    const updated = findInTree(displayTree, selectedNode.path);
+    if (updated) {
+      setSelectedNode(updated);
+    }
+  }, [displayTree]);
 
   if (isDetailsView) {
     const t = WEBVIEW_STRINGS[language];
@@ -207,6 +232,8 @@ export const App: React.FC = () => {
         onSizeMetricChange={setSizeMetric}
         colorMetric={colorMetric}
         onColorMetricChange={setColorMetric}
+        timeframe={timeframe}
+        onTimeframeChange={setTimeframe}
         maxItems={maxItems}
         onMaxItemsChange={setMaxItems}
         sourceCodeOnly={sourceCodeOnly}

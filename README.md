@@ -55,6 +55,9 @@ Switch sizing and coloring dimensions dynamically in the top bar:
   - `Git Churn` (Relative change frequency)
   - `Code-Wachstum / Code Growth` (Net growth ratio)
   - `Aktualität / Freshness` (Recency of the latest change)
+- **Timeframe Filtering (Zeitraum):**
+  - Instantly recalculate all metrics and rescale heatmap colors within a selected time window:
+  - `All time` (All), `1 week`, `1 month`, `6 months`, `1 year`, or `2 years`.
 
 ### ⚡ Direct Editor Navigation & Git Diff Inspection
 - **Jump to Code:** Click any file, class, or method in the Treemap to jump directly to that exact line in the VS Code editor.

@@ -67,7 +67,7 @@ if [[ "$CONFIRM_GIT" =~ ^[Yy]$ ]]; then
     COMMIT_MSG="Release v$TARGET_VER"
   fi
 
-  git add package.json package-lock.json
+  git add package.json package-lock.json CHANGELOG.md
   git commit -m "$COMMIT_MSG"
   git tag -a "v$TARGET_VER" -m "$COMMIT_MSG"
   echo "✅ Git Commit & Tag v$TARGET_VER erstellt."

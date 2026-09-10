@@ -1,5 +1,6 @@
 import React from 'react';
 import type { TreemapViewMode, SizeMetric, ColorMetric } from './TreemapViewer';
+import type { TimeframeOption } from '../utils/timeframeFilter';
 import { Icon } from './Icon';
 import {
   mdiTelescope,
@@ -11,6 +12,7 @@ import {
   mdiRulerSquare,
   mdiPaletteOutline,
   mdiFilterOutline,
+  mdiCalendarRangeOutline,
 } from '@mdi/js';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 
@@ -21,6 +23,8 @@ interface Props {
   onSizeMetricChange: (metric: SizeMetric) => void;
   colorMetric: ColorMetric;
   onColorMetricChange: (metric: ColorMetric) => void;
+  timeframe: TimeframeOption;
+  onTimeframeChange: (tf: TimeframeOption) => void;
   maxItems: number;
   onMaxItemsChange: (val: number) => void;
   sourceCodeOnly: boolean;
@@ -45,6 +49,8 @@ export const TopBar: React.FC<Props> = ({
   onSizeMetricChange,
   colorMetric,
   onColorMetricChange,
+  timeframe,
+  onTimeframeChange,
   maxItems,
   onMaxItemsChange,
   sourceCodeOnly,
@@ -113,6 +119,24 @@ export const TopBar: React.FC<Props> = ({
             <option value="churn">{t.colorOptions.churn}</option>
             <option value="growth">{t.colorOptions.growth}</option>
             <option value="recency">{t.colorOptions.recency}</option>
+          </select>
+        </div>
+
+        {/* Timeframe Filter */}
+        <div className="control-item" title={t.timeframe}>
+          <Icon path={mdiCalendarRangeOutline} size={0.65} color="var(--text-secondary)" />
+          <span className="control-label">{t.timeframe}</span>
+          <select
+            value={timeframe}
+            onChange={(e) => onTimeframeChange(e.target.value as TimeframeOption)}
+            className="topbar-select"
+          >
+            <option value="all">{t.timeframeOptions.all}</option>
+            <option value="1w">{t.timeframeOptions['1w']}</option>
+            <option value="1m">{t.timeframeOptions['1m']}</option>
+            <option value="6m">{t.timeframeOptions['6m']}</option>
+            <option value="1y">{t.timeframeOptions['1y']}</option>
+            <option value="2y">{t.timeframeOptions['2y']}</option>
           </select>
         </div>
 
