@@ -7,6 +7,8 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
+*.vsix
+.auspex/
 
 # Temp Clone directories (backend creates these during remote repo scans)
 .temp_clones/

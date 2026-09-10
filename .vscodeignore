@@ -1,0 +1,13 @@
+.vscode/**
+.github/**
+src/**
+webview/**
+test/**
+.git/**
+.gitignore
+tsconfig.json
+vite.config.ts
+vitest.config.ts
+plan.md
+node_modules/**
+*.vsix

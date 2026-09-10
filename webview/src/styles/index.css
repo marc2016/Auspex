@@ -1,0 +1,271 @@
+:root {
+  --bg-primary: var(--vscode-editor-background, #1e1e1e);
+  --bg-secondary: var(--vscode-sideBar-background, #252526);
+  --bg-card: var(--vscode-editorWidget-background, #2d2d2d);
+  --border-color: var(--vscode-widget-border, rgba(255, 255, 255, 0.1));
+  --text-primary: var(--vscode-editor-foreground, #cccccc);
+  --text-secondary: var(--vscode-descriptionForeground, #8c8c8c);
+  --accent-color: var(--vscode-textLink-foreground, #3794ff);
+  --button-bg: var(--vscode-button-background, #0e639c);
+  --button-fg: var(--vscode-button-foreground, #ffffff);
+  --button-hover: var(--vscode-button-hoverBackground, #1177bb);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+#root {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Layout */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.main-content {
+  display: flex;
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.treemap-area {
+  flex: 1;
+  height: 100%;
+  position: relative;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(128, 128, 128, 0.4);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(128, 128, 128, 0.6);
+}
+
+/* TopBar Responsive Styles */
+.topbar-container {
+  min-height: 44px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  gap: 8px 12px;
+  font-size: 12px;
+  z-index: 30;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.topbar-stats {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.viewmode-group {
+  display: flex;
+  background-color: var(--bg-primary);
+  border-radius: 4px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  gap: 2px;
+}
+
+.viewmode-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.viewmode-btn.active {
+  background: var(--button-bg);
+  color: var(--button-fg);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.control-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.control-label {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.topbar-select {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
+}
+
+.source-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 11px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.rescan-btn {
+  background-color: var(--button-bg);
+  color: var(--button-fg);
+  border: none;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transition: background-color 0.15s ease;
+}
+
+.rescan-btn:hover {
+  background-color: var(--button-hover);
+}
+
+.lang-switcher {
+  display: flex;
+  background-color: var(--bg-primary);
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+  padding: 2px;
+  gap: 2px;
+}
+
+.lang-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lang-btn.active {
+  background: var(--button-bg);
+  color: var(--button-fg);
+}
+
+/* Breakpoint 1: Medium tab width (< 1080px) */
+@media (max-width: 1080px) {
+  .topbar-stats {
+    display: none;
+  }
+  .viewmode-text {
+    display: none;
+  }
+  .viewmode-btn {
+    padding: 4px 6px;
+  }
+}
+
+/* Breakpoint 2: Narrow tab width (< 850px) */
+@media (max-width: 850px) {
+  .topbar-container {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .control-label {
+    display: none;
+  }
+  .source-label {
+    display: none;
+  }
+}
+
+/* Breakpoint 3: Very compact / Split editor (< 620px) */
+@media (max-width: 620px) {
+  .topbar-left, .topbar-right {
+    gap: 6px;
+  }
+  .topbar-title {
+    display: none;
+  }
+  .rescan-text {
+    display: none;
+  }
+  .topbar-select {
+    padding: 2px 4px;
+    font-size: 10px;
+    max-width: 95px;
+  }
+}
+

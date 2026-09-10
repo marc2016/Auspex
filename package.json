@@ -1,27 +1,178 @@
 {
   "name": "auspex",
-  "version": "0.1.0",
-  "private": true,
-  "workspaces": [
-    "shared",
-    "backend",
-    "frontend"
+  "displayName": "Auspex - Hotspot Treemap & Behavioral Code Analysis",
+  "description": "Interactive code hotspot treemap analyzing Git churn, complexity, and defect ratios directly in VS Code.",
+  "version": "0.2.0",
+  "publisher": "marc2016",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marc2016/Auspex.git"
+  },
+  "categories": [
+    "Visualization",
+    "Programming Languages",
+    "Other"
   ],
+  "keywords": [
+    "treemap",
+    "hotspots",
+    "git churn",
+    "code metrics",
+    "visualization"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "icon": "assets/icon.png",
+  "contributes": {
+    "commands": [
+      {
+        "command": "auspex.openTreemap",
+        "title": "Auspex: Open Hotspot Treemap",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "auspex.rescan",
+        "title": "Auspex: Rescan Workspace",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "auspex.openHelp",
+        "title": "Auspex: Open Guide & Documentation",
+        "icon": "$(question)"
+      },
+      {
+        "command": "auspex.focusDetailsView",
+        "title": "Auspex: Focus Details View",
+        "icon": "$(info)"
+      },
+      {
+        "command": "auspex.setJiraToken",
+        "title": "Auspex: Set Jira API Token",
+        "icon": "$(key)"
+      },
+      {
+        "command": "auspex.clearJiraToken",
+        "title": "Auspex: Clear Jira API Token",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "auspex.testJiraConnection",
+        "title": "Auspex: Test Jira Connection",
+        "icon": "$(plug)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "auspex-sidebar",
+          "title": "Auspex",
+          "icon": "assets/auspex-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "auspex-sidebar": [
+        {
+          "type": "webview",
+          "id": "auspex.sidebarView",
+          "name": "Auspex Hotspots"
+        },
+        {
+          "type": "webview",
+          "id": "auspex.detailsView",
+          "name": "Auspex Details"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Auspex",
+      "properties": {
+        "auspex.ignorePatterns": {
+          "type": "array",
+          "default": [
+            "node_modules",
+            "dist",
+            "build",
+            ".git",
+            "out",
+            "bin",
+            "obj"
+          ],
+          "description": "Files and patterns to ignore during Auspex workspace analysis."
+        },
+        "auspex.jira.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Jira read-only integration to enrich commit history with ticket types and defect detection."
+        },
+        "auspex.jira.host": {
+          "type": "string",
+          "default": "",
+          "description": "URL of your Jira Cloud or Jira Server instance (e.g. https://your-company.atlassian.net)."
+        },
+        "auspex.jira.email": {
+          "type": "string",
+          "default": "",
+          "description": "Your Atlassian account email address (for Jira Cloud). Leave empty if using Jira Server/Data Center PAT."
+        },
+        "auspex.jira.bugTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "Bug",
+            "Defect",
+            "Fehler",
+            "Incident",
+            "Problem"
+          ],
+          "description": "List of Jira issue type names that represent bugs or defects in Auspex hotspot analysis."
+        },
+        "auspex.jira.projectKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Optional: Filter for specific Jira project prefixes to resolve (e.g. [\"PROJ\", \"AUS\"]). Leave empty to resolve any detected key."
+        }
+      }
+    }
+  },
   "scripts": {
-    "start": "./start.sh",
-    "dev": "./start.sh",
-    "build": "npm run build --workspace=shared && npm run build --workspace=backend && npm run build --workspace=frontend",
-    "test": "npm run test --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
-    "clean": "find . -name 'dist' -not -path '*/node_modules/*' -exec rm -rf {} + && find . -name 'node_modules' -maxdepth 2 -exec rm -rf {} +"
+    "vscode:prepublish": "npm run build",
+    "compile:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "compile:webview": "vite build",
+    "build": "npm run compile:ext && npm run compile:webview",
+    "watch:ext": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --watch",
+    "package": "vsce package --no-git-tag-version",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mdi/js": "^7.4.47",
+    "@mdi/react": "^1.6.1",
+    "simple-git": "^3.27.0"
   },
   "devDependencies": {
-    "concurrently": "^9.1.0",
-    "typescript": "^5.8.3"
-  },
-  "allowScripts": {
-    "better-sqlite3@11.10.0": true,
-    "esbuild@0.28.2": true,
-    "fsevents@2.3.3": true
+    "@types/node": "^20.14.10",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/vscode": "^1.90.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "@vscode/vsce": "^3.0.0",
+    "echarts": "^5.5.1",
+    "esbuild": "^0.24.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.1"
   }
 }
