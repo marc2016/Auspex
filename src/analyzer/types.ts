@@ -1,10 +1,36 @@
 export type NodeType = 'folder' | 'namespace' | 'file' | 'class' | 'method';
 
+export type BiomarkerType =
+  | 'brain_method'
+  | 'bumpy_road'
+  | 'nested_complexity'
+  | 'complex_conditional'
+  | 'deep_nesting'
+  | 'large_method'
+  | 'excess_parameters'
+  | 'brain_class';
+
+export interface BiomarkerFinding {
+  type: BiomarkerType;
+  severity: 'low' | 'medium' | 'high';
+  functionName?: string;
+  startLine?: number;
+  endLine?: number;
+  details: string;
+}
+
+export interface CodeHealthResult {
+  score: number; // 1.0 to 10.0
+  biomarkers: BiomarkerFinding[];
+}
+
 export interface MethodInfo {
   name: string;
   startLine: number;
   endLine: number;
   loc: number;
+  codeHealth?: number;
+  biomarkers?: BiomarkerFinding[];
 }
 
 export interface ClassInfo {
@@ -13,6 +39,8 @@ export interface ClassInfo {
   endLine: number;
   loc: number;
   methods: MethodInfo[];
+  codeHealth?: number;
+  biomarkers?: BiomarkerFinding[];
 }
 
 export interface ParsedFileInfo {
@@ -23,6 +51,8 @@ export interface ParsedFileInfo {
   loc: number;
   fileHash: string;
   lastModifiedAt?: number;
+  codeHealth?: number;
+  biomarkers?: BiomarkerFinding[];
 }
 
 export interface ContributorStat {
@@ -85,6 +115,8 @@ export interface TreeNode {
   children?: TreeNode[];
   contributors?: ContributorStat[];
   commits?: CommitInfo[];
+  codeHealth?: number; // 1.0 to 10.0 (CodeScene scale)
+  biomarkers?: BiomarkerFinding[];
 }
 
 export interface HotspotItem {
@@ -95,6 +127,7 @@ export interface HotspotItem {
   fixCount: number;
   churnScore: number;
   defectRatio: number;
+  codeHealth?: number;
 }
 
 export interface AnalysisSnapshot {

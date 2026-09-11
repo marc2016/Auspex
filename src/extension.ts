@@ -4,23 +4,30 @@ import { AuspexPipeline } from './analyzer/pipeline';
 import { AuspexStorage } from './storage/cache';
 import { TreemapPanel } from './panels/TreemapPanel';
 import { HelpPanel } from './panels/HelpPanel';
+import { AuspexOverviewProvider } from './providers/OverviewProvider';
 import { AuspexSidebarProvider } from './providers/SidebarProvider';
 import { AuspexDetailsViewProvider } from './providers/DetailsViewProvider';
+import { AuspexHealthViewProvider } from './providers/HealthViewProvider';
 import { resolveLanguage, EXT_STRINGS } from './i18n';
+import { openFileInEditor } from './utils/navigation';
 import { AuspexGitContentProvider, AUSPEX_GIT_SCHEME } from './utils/gitDiff';
 import { findFileNode } from './utils/treeLookup';
-import type { AnalysisSnapshot } from './analyzer/types';
+import type { AnalysisSnapshot, TreeNode } from './analyzer/types';
 import { JiraConfigManager } from './integrations/jira/jiraConfigManager';
 import { JiraClient } from './integrations/jira/jiraClient';
 
 let pipeline: AuspexPipeline;
 let storage: AuspexStorage | null = null;
 let jiraConfigManager: JiraConfigManager;
+let overviewProvider: AuspexOverviewProvider;
 let sidebarProvider: AuspexSidebarProvider;
 let detailsViewProvider: AuspexDetailsViewProvider;
+let healthViewProvider: AuspexHealthViewProvider;
 let statusBarItem: vscode.StatusBarItem;
 let latestSnapshot: AnalysisSnapshot | null = null;
+let latestSelectedNode: TreeNode | null = null;
 let updateDetailsForEditor: (editor: vscode.TextEditor | undefined) => void;
+let setSelectedNodeAcrossProviders: (node: TreeNode | null, reveal?: boolean) => void;
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('[Auspex] Extension is activating…');
@@ -40,8 +47,14 @@ export async function activate(context: vscode.ExtensionContext) {
   pipeline = new AuspexPipeline();
   jiraConfigManager = new JiraConfigManager(context.secrets);
 
-  // Restore cached snapshot if available
-  latestSnapshot = storage.loadSnapshot();
+  // Restore cached snapshot if available (must have valid codeHealth)
+  const cachedSnapshot = storage.loadSnapshot();
+  if (cachedSnapshot && typeof cachedSnapshot.tree?.codeHealth === 'number') {
+    latestSnapshot = cachedSnapshot;
+  } else {
+    console.log('[Auspex] Cached snapshot lacks Code Health data. Invalidation triggered for fresh scan.');
+    latestSnapshot = null;
+  }
 
   // 1. Setup Status Bar
   statusBarItem = vscode.window.createStatusBarItem(
@@ -54,6 +67,19 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusBarItem);
 
   // 2. Setup Sidebar Providers
+  overviewProvider = new AuspexOverviewProvider(
+    () => openTreemap(context, workspacePath),
+    () => runScan(context, workspacePath, true),
+    () => openHelp(context, workspacePath)
+  );
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      AuspexOverviewProvider.viewType,
+      overviewProvider
+    )
+  );
+
   sidebarProvider = new AuspexSidebarProvider(
     workspacePath,
     () => openTreemap(context, workspacePath),
@@ -80,8 +106,22 @@ export async function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  healthViewProvider = new AuspexHealthViewProvider(
+    context.extensionUri,
+    workspacePath
+  );
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      AuspexHealthViewProvider.viewType,
+      healthViewProvider
+    )
+  );
+
   if (latestSnapshot) {
+    overviewProvider.updateSnapshot(latestSnapshot);
     sidebarProvider.updateSnapshot(latestSnapshot);
+    healthViewProvider.updateSnapshot(latestSnapshot);
   }
 
   // 3. Register Commands
@@ -106,6 +146,21 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('auspex.openHelp', () => {
       openHelp(context, workspacePath);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('auspex.openSelectedFile', async () => {
+      const node =
+        latestSelectedNode ||
+        detailsViewProvider.selectedNode ||
+        healthViewProvider.selectedNode ||
+        sidebarProvider.selectedNode;
+      if (!node) return;
+      const targetFilePath = (node.path || '').split('#')[0].replace(/^\//, '');
+      if (targetFilePath) {
+        await openFileInEditor(workspacePath, targetFilePath, node.startLine, node.endLine);
+      }
     })
   );
 
@@ -203,6 +258,14 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   // 5. Track Active Editor to automatically update Details Sidebar
+  setSelectedNodeAcrossProviders = (node: TreeNode | null, reveal = true) => {
+    latestSelectedNode = node;
+    vscode.commands.executeCommand('setContext', 'auspex.hasSelectedFile', !!node);
+    sidebarProvider.setSelectedNode(node);
+    detailsViewProvider.setSelectedNode(node, reveal);
+    healthViewProvider.setSelectedNode(node, reveal);
+  };
+
   updateDetailsForEditor = (editor: vscode.TextEditor | undefined) => {
     if (!editor || !latestSnapshot?.tree) return;
     if (editor.document.uri.scheme !== 'file') return;
@@ -213,7 +276,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const node = findFileNode(latestSnapshot.tree, relPath);
     if (node) {
-      detailsViewProvider.setSelectedNode(node, false);
+      setSelectedNodeAcrossProviders(node, false);
     }
   };
 
@@ -243,10 +306,12 @@ async function openTreemap(
     workspacePath,
     latestSnapshot,
     () => runScan(context, workspacePath, true),
-    (node) => detailsViewProvider.setSelectedNode(node, true)
+    (node) => {
+      setSelectedNodeAcrossProviders(node, true);
+    }
   );
 
-  if (!latestSnapshot) {
+  if (!latestSnapshot || typeof latestSnapshot.tree?.codeHealth !== 'number') {
     await runScan(context, workspacePath, true);
   } else {
     panel.sendSnapshot(latestSnapshot);
@@ -311,7 +376,9 @@ async function runScan(
       );
 
       latestSnapshot = snapshot;
+      overviewProvider.updateSnapshot(snapshot);
       sidebarProvider.updateSnapshot(snapshot);
+      healthViewProvider.updateSnapshot(snapshot);
       if (TreemapPanel.currentPanel) {
         TreemapPanel.currentPanel.sendSnapshot(snapshot);
       }

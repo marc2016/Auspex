@@ -136,7 +136,7 @@ export class AuspexPipeline {
 
       let parsed: ParsedFileInfo;
       const cached = cachedFiles[relPath];
-      if (cached) {
+      if (cached && typeof cached.codeHealth === 'number') {
         parsed = cached;
       } else {
         parsed = this.astAnalyzer.analyzeFile(absPath, relPath);

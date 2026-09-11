@@ -39,7 +39,7 @@
       {
         "command": "auspex.rescan",
         "title": "Auspex: Rescan Workspace",
-        "icon": "$(sync)"
+        "icon": "$(refresh)"
       },
       {
         "command": "auspex.openHelp",
@@ -65,8 +65,37 @@
         "command": "auspex.testJiraConnection",
         "title": "Auspex: Test Jira Connection",
         "icon": "$(plug)"
+      },
+      {
+        "command": "auspex.openSelectedFile",
+        "title": "Auspex: Open File in Editor",
+        "icon": "$(go-to-file)"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "auspex.openTreemap",
+          "when": "view == auspex.overviewView || view == auspex.sidebarView",
+          "group": "navigation@1"
+        },
+        {
+          "command": "auspex.rescan",
+          "when": "view == auspex.overviewView || view == auspex.sidebarView",
+          "group": "navigation@2"
+        },
+        {
+          "command": "auspex.openHelp",
+          "when": "view == auspex.overviewView || view == auspex.sidebarView",
+          "group": "navigation@3"
+        },
+        {
+          "command": "auspex.openSelectedFile",
+          "when": "view == auspex.detailsView || view == auspex.healthView || (view == auspex.sidebarView && auspex.hasSelectedFile)",
+          "group": "navigation@1"
+        }
+      ]
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -80,6 +109,11 @@
       "auspex-sidebar": [
         {
           "type": "webview",
+          "id": "auspex.overviewView",
+          "name": "Auspex"
+        },
+        {
+          "type": "webview",
           "id": "auspex.sidebarView",
           "name": "Auspex Hotspots"
         },
@@ -87,6 +121,11 @@
           "type": "webview",
           "id": "auspex.detailsView",
           "name": "Auspex Details"
+        },
+        {
+          "type": "webview",
+          "id": "auspex.healthView",
+          "name": "Auspex Health"
         }
       ]
     },
@@ -158,16 +197,17 @@
   "dependencies": {
     "@mdi/js": "^7.4.47",
     "@mdi/react": "^1.6.1",
+    "d3": "^7.9.0",
     "simple-git": "^3.27.0"
   },
   "devDependencies": {
+    "@types/d3": "^7.4.3",
     "@types/node": "^20.14.10",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/vscode": "^1.90.0",
     "@vitejs/plugin-react": "^4.3.1",
     "@vscode/vsce": "^3.0.0",
-    "echarts": "^5.5.1",
     "esbuild": "^0.24.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

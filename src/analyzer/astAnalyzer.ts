@@ -3,6 +3,8 @@ import path from 'path';
 import crypto from 'crypto';
 import type { ParsedFileInfo, ClassInfo, MethodInfo } from './types';
 
+import { CodeHealthAnalyzer } from './codeHealth';
+
 export const DEFAULT_IGNORE_PATTERNS = [
   'node_modules',
   '.git',
@@ -91,6 +93,8 @@ export function isPathIgnored(name: string, relPath: string, patterns: string[])
 }
 
 export class AstStructureAnalyzer {
+  private codeHealthAnalyzer = new CodeHealthAnalyzer();
+
   collectFiles(dirPath: string, patterns: string[] = DEFAULT_IGNORE_PATTERNS): string[] {
     const result: string[] = [];
 
@@ -135,6 +139,8 @@ export class AstStructureAnalyzer {
         classes: [],
         methods: [],
         fileHash: '',
+        codeHealth: 10.0,
+        biomarkers: [],
       };
     }
 
@@ -146,12 +152,32 @@ export class AstStructureAnalyzer {
 
     const lang = CODE_EXTENSIONS[ext];
     if (!lang) {
-      return { filePath: relPath, loc, classes: [], methods: [], fileHash, lastModifiedAt };
+      return {
+        filePath: relPath,
+        loc,
+        classes: [],
+        methods: [],
+        fileHash,
+        lastModifiedAt,
+        codeHealth: 10.0,
+        biomarkers: [],
+      };
     }
 
     const { namespace, classes, methods } = this.extractStructure(lines, lang);
+    const healthResult = this.codeHealthAnalyzer.analyzeFile(lines, methods, classes, lang);
 
-    return { filePath: relPath, namespace, loc, classes, methods, fileHash, lastModifiedAt };
+    return {
+      filePath: relPath,
+      namespace,
+      loc,
+      classes,
+      methods,
+      fileHash,
+      lastModifiedAt,
+      codeHealth: healthResult.score,
+      biomarkers: healthResult.biomarkers,
+    };
   }
 
   private extractStructure(
@@ -284,6 +310,10 @@ export class AstStructureAnalyzer {
       /^\s*(?:(?:public|private|protected|readonly|static)\s+)*([a-zA-Z0-9_$]+)\s*=\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>/,
       /^\s*(?:(?:public|private|protected|static|async|override|virtual|readonly)\s+)*([a-zA-Z0-9_$]+)\s*\([^)]*\)\s*(?::\s*[^{]+)?\s*\{/,
       /^\s*(?:(?:public|private|protected|internal|static|final|abstract|async|override|virtual)\s+)+[a-zA-Z0-9_<>[\]?]+\s+([a-zA-Z0-9_]+)\s*\([^)]*\)/,
+      /^\s*([a-zA-Z0-9_$]+)\s*:\s*(?:async\s+)?function\s*\(/,
+      /^\s*([a-zA-Z0-9_$]+)\s*:\s*(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>/,
+      /^\s*([a-zA-Z0-9_$]+)\s*\([^)]*\)\s*\{/,
+      /(?:[a-zA-Z0-9_$]+\.)+([a-zA-Z0-9_$]+)\s*=\s*(?:async\s+)?function/,
     ];
 
     for (let i = 0; i < lines.length; i++) {

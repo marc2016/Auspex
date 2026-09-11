@@ -155,6 +155,8 @@ export class TreeAggregator {
             endLine: cls.endLine,
             contributors: fileContributors,
             commits: fileCommits,
+            codeHealth: cls.codeHealth ?? file.codeHealth ?? 10.0,
+            biomarkers: cls.biomarkers || [],
             children: [],
           };
           classMap.set(cls.name, classNode);
@@ -182,6 +184,8 @@ export class TreeAggregator {
           endLine: m.endLine,
           contributors: fileContributors,
           commits: fileCommits,
+          codeHealth: m.codeHealth ?? file.codeHealth ?? 10.0,
+          biomarkers: m.biomarkers || [],
         };
 
         const enclosingClass = file.classes.find(
@@ -214,6 +218,8 @@ export class TreeAggregator {
         lastModifiedAt,
         contributors: fileContributors,
         commits: fileCommits,
+        codeHealth: file.codeHealth ?? 10.0,
+        biomarkers: file.biomarkers || [],
         children: fileChildren.length > 0 ? fileChildren : undefined,
       };
 
@@ -253,6 +259,8 @@ export class TreeAggregator {
     let totalAdded = 0;
     let totalDeleted = 0;
     let latestTimestamp = 0;
+    let weightedHealthSum = 0;
+    let healthWeightTotal = 0;
 
     const folderContribMap = new Map<
       string,
@@ -261,7 +269,8 @@ export class TreeAggregator {
     const commitMap = new Map<string, CommitInfo>();
 
     for (const child of node.children) {
-      totalLoc += this.aggregateLoc(child);
+      const childLoc = this.aggregateLoc(child);
+      totalLoc += childLoc;
       totalCommits += child.commitCount;
       totalFixes += child.fixCount ?? 0;
       totalFeats += child.featCount ?? 0;
@@ -270,6 +279,12 @@ export class TreeAggregator {
       totalDeleted += child.linesDeleted ?? 0;
       if (child.lastModifiedAt && child.lastModifiedAt > latestTimestamp) {
         latestTimestamp = child.lastModifiedAt;
+      }
+
+      if (typeof child.codeHealth === 'number') {
+        const weight = Math.max(childLoc, 1);
+        weightedHealthSum += child.codeHealth * weight;
+        healthWeightTotal += weight;
       }
 
       if (child.contributors) {
@@ -309,7 +324,20 @@ export class TreeAggregator {
       node.linesAdded = totalAdded;
       node.linesDeleted = totalDeleted;
       node.defectRatio = totalCommits > 0 ? totalFixes / totalCommits : 0;
+      node.codeHealth =
+        healthWeightTotal > 0 ? Number((weightedHealthSum / healthWeightTotal).toFixed(1)) : 10.0;
       if (latestTimestamp > 0) node.lastModifiedAt = latestTimestamp;
+
+      // Aggregate biomarkers from children for folder/cluster view
+      const folderBiomarkers: any[] = [];
+      if (node.children) {
+        for (const child of node.children) {
+          if (child.biomarkers && child.biomarkers.length > 0) {
+            folderBiomarkers.push(...child.biomarkers);
+          }
+        }
+      }
+      node.biomarkers = folderBiomarkers;
 
       // Populate aggregated contributors for folder/namespace
       const contributors: ContributorStat[] = [];
@@ -361,6 +389,7 @@ export class TreeAggregator {
       const fixCount = stats?.fixCount ?? 0;
       const churnScore = maxCommits > 0 ? commitCount / maxCommits : 0;
       const defectRatio = commitCount > 0 ? fixCount / commitCount : 0;
+      const codeHealth = f.codeHealth ?? 10.0;
 
       return {
         filePath: f.filePath,
@@ -370,14 +399,18 @@ export class TreeAggregator {
         fixCount,
         churnScore,
         defectRatio,
+        codeHealth,
       };
     });
 
-    // Score hotspot by combination of churnScore and LOC
+    // Score hotspot by combining ChurnScore, Code Health penalty (11 - health), and LOC
+    // CodeScene formula: Hotspots are files with high change frequency AND low code health!
     return list
       .sort((a, b) => {
-        const scoreA = a.churnScore * 0.7 + (Math.min(a.loc, 1000) / 1000) * 0.3;
-        const scoreB = b.churnScore * 0.7 + (Math.min(b.loc, 1000) / 1000) * 0.3;
+        const unhealthA = (11 - (a.codeHealth ?? 10)) / 10;
+        const unhealthB = (11 - (b.codeHealth ?? 10)) / 10;
+        const scoreA = a.churnScore * 0.5 + unhealthA * 0.3 + (Math.min(a.loc, 1000) / 1000) * 0.2;
+        const scoreB = b.churnScore * 0.5 + unhealthB * 0.3 + (Math.min(b.loc, 1000) / 1000) * 0.2;
         return scoreB - scoreA;
       })
       .slice(0, 20);

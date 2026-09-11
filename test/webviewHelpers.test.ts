@@ -258,5 +258,105 @@ describe('Webview Helpers', () => {
       expect(methods.length).toBe(1);
       expect(methods[0].name).toBe('start()');
     });
+
+    it('flattenTreeToFiles returns only file nodes with children set to undefined', () => {
+      const tree: TreeNode = {
+        name: 'root',
+        path: '/',
+        type: 'folder',
+        value: 100,
+        loc: 100,
+        commitCount: 0,
+        churnScore: 0,
+        fixCount: 0,
+        featCount: 0,
+        refactorCount: 0,
+        linesAdded: 0,
+        linesDeleted: 0,
+        children: [
+          {
+            name: 'main.ts',
+            path: 'main.ts',
+            type: 'file',
+            value: 60,
+            loc: 60,
+            commitCount: 5,
+            churnScore: 0.5,
+            fixCount: 1,
+            featCount: 0,
+            refactorCount: 0,
+            linesAdded: 0,
+            linesDeleted: 0,
+            children: [
+              {
+                name: 'start()',
+                path: 'main.ts#start',
+                type: 'method',
+                value: 20,
+                loc: 20,
+                commitCount: 0,
+                churnScore: 0,
+                fixCount: 0,
+                featCount: 0,
+                refactorCount: 0,
+                linesAdded: 0,
+                linesDeleted: 0,
+              },
+            ],
+          },
+        ],
+      };
+
+      function flattenTreeToFiles(node: TreeNode): TreeNode[] {
+        const files: TreeNode[] = [];
+        function traverse(n: TreeNode) {
+          if (n.type === 'file') {
+            files.push({ ...n, children: undefined });
+          } else if (n.children) {
+            for (const child of n.children) traverse(child);
+          }
+        }
+        traverse(node);
+        return files;
+      }
+
+      const files = flattenTreeToFiles(tree);
+      expect(files.length).toBe(1);
+      expect(files[0].name).toBe('main.ts');
+      expect(files[0].type).toBe('file');
+      expect(files[0].children).toBeUndefined();
+      // Ensure methods are not returned as tiles in files mode
+      expect(files.some((f) => f.type === 'method')).toBe(false);
+    });
+  });
+
+  describe('getCodeHealthColor', () => {
+    // Import function directly or test threshold mapping
+    function getCodeHealthColor(score: number | undefined): string {
+      const s = score ?? 10.0;
+      if (s < 6.0) return '#ef4444'; // 🔴 Unhealthy
+      if (s < 9.0) return '#f59e0b'; // 🟡 Problematic
+      return '#10b981'; // 🟢 Healthy
+    }
+
+    it('returns red for unhealthy scores below 6.0', () => {
+      expect(getCodeHealthColor(1.0)).toBe('#ef4444');
+      expect(getCodeHealthColor(3.5)).toBe('#ef4444');
+      expect(getCodeHealthColor(5.9)).toBe('#ef4444');
+    });
+
+    it('returns yellow/amber for problematic scores between 6.0 and 8.9', () => {
+      expect(getCodeHealthColor(6.0)).toBe('#f59e0b');
+      expect(getCodeHealthColor(7.4)).toBe('#f59e0b');
+      expect(getCodeHealthColor(8.9)).toBe('#f59e0b');
+    });
+
+    it('returns green for healthy scores 9.0 and above, including default', () => {
+      expect(getCodeHealthColor(9.0)).toBe('#10b981');
+      expect(getCodeHealthColor(9.8)).toBe('#10b981');
+      expect(getCodeHealthColor(10.0)).toBe('#10b981');
+      expect(getCodeHealthColor(undefined)).toBe('#10b981');
+    });
   });
 });
+

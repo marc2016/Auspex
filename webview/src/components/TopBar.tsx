@@ -13,10 +13,14 @@ import {
   mdiPaletteOutline,
   mdiFilterOutline,
   mdiCalendarRangeOutline,
+  mdiCircleMultipleOutline,
+  mdiChartBoxOutline,
 } from '@mdi/js';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 
 interface Props {
+  chartType: 'treemap' | 'systemMap';
+  onChartTypeChange: (type: 'treemap' | 'systemMap') => void;
   viewMode: TreemapViewMode;
   onViewModeChange: (mode: TreemapViewMode) => void;
   sizeMetric: SizeMetric;
@@ -43,6 +47,8 @@ const VIEW_MODE_ICONS: Record<TreemapViewMode, string> = {
 };
 
 export const TopBar: React.FC<Props> = ({
+  chartType,
+  onChartTypeChange,
   viewMode,
   onViewModeChange,
   sizeMetric,
@@ -73,38 +79,62 @@ export const TopBar: React.FC<Props> = ({
           </span>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="viewmode-group">
-          {(['files', 'classes', 'functions', 'hierarchy'] as TreemapViewMode[]).map((mode) => (
-            <button
-              key={mode}
-              onClick={() => onViewModeChange(mode)}
-              className={`viewmode-btn ${viewMode === mode ? 'active' : ''}`}
-              title={t.viewModes[mode]}
-            >
-              <Icon path={VIEW_MODE_ICONS[mode]} size={0.65} />
-              <span className="viewmode-text">{t.viewModes[mode]}</span>
-            </button>
-          ))}
+        {/* Chart Type Toggle: Treemap vs System Map */}
+        <div className="viewmode-group" style={{ marginRight: '8px' }}>
+          <button
+            onClick={() => onChartTypeChange('treemap')}
+            className={`viewmode-btn ${chartType === 'treemap' ? 'active' : ''}`}
+            title={t.chartType.treemap}
+          >
+            <Icon path={mdiChartBoxOutline} size={0.65} />
+            <span className="viewmode-text">{t.chartType.treemap}</span>
+          </button>
+          <button
+            onClick={() => onChartTypeChange('systemMap')}
+            className={`viewmode-btn ${chartType === 'systemMap' ? 'active' : ''}`}
+            title={t.chartType.systemMap}
+          >
+            <Icon path={mdiCircleMultipleOutline} size={0.65} />
+            <span className="viewmode-text">{t.chartType.systemMap}</span>
+          </button>
         </div>
+
+        {/* View Mode Toggle (for Treemap) */}
+        {chartType === 'treemap' && (
+          <div className="viewmode-group">
+            {(['files', 'classes', 'functions', 'hierarchy'] as TreemapViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => onViewModeChange(mode)}
+                className={`viewmode-btn ${viewMode === mode ? 'active' : ''}`}
+                title={t.viewModes[mode]}
+              >
+                <Icon path={VIEW_MODE_ICONS[mode]} size={0.65} />
+                <span className="viewmode-text">{t.viewModes[mode]}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="topbar-right">
-        {/* Size Metric */}
-        <div className="control-item" title={t.size}>
-          <Icon path={mdiRulerSquare} size={0.65} color="var(--text-secondary)" />
-          <span className="control-label">{t.size}</span>
-          <select
-            value={sizeMetric}
-            onChange={(e) => onSizeMetricChange(e.target.value as SizeMetric)}
-            className="topbar-select"
-          >
-            <option value="loc">{t.sizeOptions.loc}</option>
-            <option value="churn">{t.sizeOptions.churn}</option>
-            <option value="fixes">{t.sizeOptions.fixes}</option>
-            <option value="added">{t.sizeOptions.added}</option>
-          </select>
-        </div>
+        {/* Size Metric (Treemap only) */}
+        {chartType === 'treemap' && (
+          <div className="control-item" title={t.size}>
+            <Icon path={mdiRulerSquare} size={0.65} color="var(--text-secondary)" />
+            <span className="control-label">{t.size}</span>
+            <select
+              value={sizeMetric}
+              onChange={(e) => onSizeMetricChange(e.target.value as SizeMetric)}
+              className="topbar-select"
+            >
+              <option value="loc">{t.sizeOptions.loc}</option>
+              <option value="churn">{t.sizeOptions.churn}</option>
+              <option value="fixes">{t.sizeOptions.fixes}</option>
+              <option value="added">{t.sizeOptions.added}</option>
+            </select>
+          </div>
+        )}
 
         {/* Color Metric */}
         <div className="control-item" title={t.color}>
@@ -119,6 +149,7 @@ export const TopBar: React.FC<Props> = ({
             <option value="churn">{t.colorOptions.churn}</option>
             <option value="growth">{t.colorOptions.growth}</option>
             <option value="recency">{t.colorOptions.recency}</option>
+            <option value="health">{t.colorOptions.health}</option>
           </select>
         </div>
 
@@ -140,22 +171,24 @@ export const TopBar: React.FC<Props> = ({
           </select>
         </div>
 
-        {/* Item Limit Filter */}
-        <div className="control-item" title={t.limit}>
-          <Icon path={mdiFilterOutline} size={0.65} color="var(--text-secondary)" />
-          <span className="control-label">{t.limit}</span>
-          <select
-            value={maxItems}
-            onChange={(e) => onMaxItemsChange(Number(e.target.value))}
-            className="topbar-select"
-          >
-            <option value={50}>Top 50</option>
-            <option value={100}>Top 100</option>
-            <option value={200}>Top 200</option>
-            <option value={500}>Top 500</option>
-            <option value={0}>{t.limitAll}</option>
-          </select>
-        </div>
+        {/* Item Limit Filter (Treemap only) */}
+        {chartType === 'treemap' && (
+          <div className="control-item" title={t.limit}>
+            <Icon path={mdiFilterOutline} size={0.65} color="var(--text-secondary)" />
+            <span className="control-label">{t.limit}</span>
+            <select
+              value={maxItems}
+              onChange={(e) => onMaxItemsChange(Number(e.target.value))}
+              className="topbar-select"
+            >
+              <option value={50}>Top 50</option>
+              <option value={100}>Top 100</option>
+              <option value={200}>Top 200</option>
+              <option value={500}>Top 500</option>
+              <option value={0}>{t.limitAll}</option>
+            </select>
+          </div>
+        )}
 
         {/* Source Code Filter */}
         <label className="source-checkbox" title={t.sourceOnly}>

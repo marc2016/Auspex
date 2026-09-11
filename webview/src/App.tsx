@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { getVsCodeApi } from './services/vscode';
 import { TreemapViewer, type TreemapViewMode, type SizeMetric, type ColorMetric } from './components/TreemapViewer';
+import { SystemMapViewer } from './components/SystemMapViewer';
 import { TreemapDetailsPanel } from './components/TreemapDetailsPanel';
 import { TopBar } from './components/TopBar';
 import { WEBVIEW_STRINGS, useLanguage } from './i18n';
 import { Icon } from './components/Icon';
-import { mdiInformationOutline } from '@mdi/js';
+import { mdiInformationOutline, mdiHeartPulse } from '@mdi/js';
 import type { AnalysisSnapshot, TreeNode, PipelineProgress } from '../../src/analyzer/types';
 import { type TimeframeOption, filterTreeByTimeframe } from './utils/timeframeFilter';
 
@@ -44,17 +45,19 @@ export const App: React.FC = () => {
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
-  const [isDetailsView, setIsDetailsView] = useState<boolean>(() => {
-    return (
-      typeof window !== 'undefined' &&
-      ((window as any).__AUSPEX_VIEW__ === 'details' ||
-        window.location.search.includes('view=details'))
-    );
+  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health'>(() => {
+    if (typeof window !== 'undefined') {
+      const v = (window as any).__AUSPEX_VIEW__;
+      if (v === 'health' || window.location.search.includes('view=health')) return 'health';
+      if (v === 'details' || window.location.search.includes('view=details')) return 'details';
+    }
+    return 'main';
   });
 
+  const [chartType, setChartType] = useState<'treemap' | 'systemMap'>('treemap');
   const [viewMode, setViewMode] = useState<TreemapViewMode>('files');
   const [sizeMetric, setSizeMetric] = useState<SizeMetric>('loc');
-  const [colorMetric, setColorMetric] = useState<ColorMetric>('fixes');
+  const [colorMetric, setColorMetric] = useState<ColorMetric>('health');
   const [timeframe, setTimeframe] = useState<TimeframeOption>('all');
   const [sourceCodeOnly, setSourceCodeOnly] = useState(true);
   const [maxItems, setMaxItems] = useState(100);
@@ -68,8 +71,8 @@ export const App: React.FC = () => {
       if (!msg) return;
 
       if (msg.type === 'init') {
-        if (msg.view === 'details') {
-          setIsDetailsView(true);
+        if (msg.view === 'details' || msg.view === 'health') {
+          setViewModeType(msg.view);
         }
         if (msg.language && (msg.language === 'de' || msg.language === 'en')) {
           setLanguage(msg.language);
@@ -98,6 +101,7 @@ export const App: React.FC = () => {
 
   const handleNodeClick = (node: TreeNode) => {
     setSelectedNode(node);
+    // Update and focus the dedicated VS Code Sidebar ("Auspex Details")
     vscode.postMessage({ type: 'nodeSelected', node });
   };
 
@@ -158,7 +162,7 @@ export const App: React.FC = () => {
     }
   }, [displayTree]);
 
-  if (isDetailsView) {
+  if (viewModeType === 'details' || viewModeType === 'health') {
     const t = WEBVIEW_STRINGS[language];
     return (
       <div
@@ -182,7 +186,93 @@ export const App: React.FC = () => {
             onOpenExternal={handleOpenExternal}
             language={language}
             isSidebarView={true}
+            initialTab={viewModeType === 'health' ? 'health' : 'details'}
+            mode={viewModeType === 'health' ? 'health' : 'details'}
           />
+        ) : viewModeType === 'health' ? (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              height: '100%',
+              padding: '24px 16px',
+              textAlign: 'center',
+              gap: 12,
+              color: 'var(--text-secondary)',
+              boxSizing: 'border-box',
+              overflowY: 'auto',
+            }}
+          >
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: '50%',
+                backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Icon path={mdiHeartPulse} size={1.2} color="#10b981" />
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {t.codeHealth.noNodeSelectedHealthTitle}
+            </div>
+            <div style={{ fontSize: 11, lineHeight: 1.5, maxWidth: 260 }}>
+              {t.codeHealth.noNodeSelectedHealthDesc}
+            </div>
+
+            {snapshot?.tree?.codeHealth !== undefined && (() => {
+              const sysScore = snapshot.tree.codeHealth;
+              const isHealthy = sysScore >= 9.0;
+              const isProblematic = sysScore >= 6.0 && sysScore < 9.0;
+              const color = isHealthy ? '#10b981' : isProblematic ? '#f59e0b' : '#ef4444';
+              const statusLabel = isHealthy ? t.codeHealth.healthy : isProblematic ? t.codeHealth.problematic : t.codeHealth.unhealthy;
+
+              return (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: '12px 14px',
+                    borderRadius: 8,
+                    backgroundColor: 'var(--bg-card)',
+                    border: `1px solid ${color}40`,
+                    width: '100%',
+                    maxWidth: 280,
+                    textAlign: 'left',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
+                      Workspace {t.codeHealth.score}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color,
+                        backgroundColor: `${color}20`,
+                        padding: '1px 6px',
+                        borderRadius: 3,
+                      }}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 4 }}>
+                    <span style={{ fontSize: 24, fontWeight: 800, color }}>
+                      {sysScore.toFixed(1)}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>/ 10.0</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
         ) : (
           <div
             style={{
@@ -226,6 +316,8 @@ export const App: React.FC = () => {
   return (
     <div className="app-container">
       <TopBar
+        chartType={chartType}
+        onChartTypeChange={setChartType}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         sizeMetric={sizeMetric}
@@ -244,17 +336,27 @@ export const App: React.FC = () => {
         language={language}
       />
 
-      <div className="main-content">
-        <div className="treemap-area">
+      <div className="main-content" style={{ position: 'relative', display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="treemap-area" style={{ flex: 1, position: 'relative', height: '100%' }}>
           {displayTree ? (
-            <TreemapViewer
-              tree={displayTree}
-              viewMode={viewMode}
-              sizeMetric={sizeMetric}
-              colorMetric={colorMetric}
-              maxItems={maxItems}
-              onNodeClick={handleNodeClick}
-            />
+            chartType === 'systemMap' ? (
+              <SystemMapViewer
+                tree={displayTree}
+                selectedNode={selectedNode}
+                onNodeClick={handleNodeClick}
+                colorMetric={colorMetric}
+                language={language}
+              />
+            ) : (
+              <TreemapViewer
+                tree={displayTree}
+                viewMode={viewMode}
+                sizeMetric={sizeMetric}
+                colorMetric={colorMetric}
+                maxItems={maxItems}
+                onNodeClick={handleNodeClick}
+              />
+            )
           ) : (
             <div
               style={{
@@ -312,6 +414,7 @@ export const App: React.FC = () => {
               `}</style>
             </div>
           )}
+
         </div>
       </div>
     </div>

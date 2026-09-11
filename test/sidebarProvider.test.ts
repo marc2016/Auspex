@@ -80,7 +80,7 @@ describe('AuspexSidebarProvider', () => {
     (vscode.env as any).language = 'en-US';
   });
 
-  it('renders stats grid and hotspots when updated with a snapshot', () => {
+  it('renders hotspots list when updated with a snapshot', () => {
     provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
 
     const snapshot: AnalysisSnapshot = {
@@ -110,12 +110,31 @@ describe('AuspexSidebarProvider', () => {
 
     provider.updateSnapshot(snapshot);
 
-    expect(mockWebviewView.webview.html).toContain('15,420');
-    expect(mockWebviewView.webview.html).toContain('42');
     expect(mockWebviewView.webview.html).toContain('Hotspots (1)');
     expect(mockWebviewView.webview.html).toContain('core.ts');
     expect(mockWebviewView.webview.html).toContain('95% churn');
     expect(mockWebviewView.webview.html).toContain('25 commits');
+  });
+
+  it('renders compact unified header when a node is selected', () => {
+    provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
+
+    provider.setSelectedNode({
+      name: 'core.ts',
+      path: 'src/core.ts',
+      type: 'file',
+      loc: 1200,
+      commitCount: 25,
+      churnScore: 0.95,
+      fixCount: 3,
+      linesAdded: 50,
+      linesDeleted: 10,
+    });
+
+    expect(mockWebviewView.webview.html).toContain('core.ts');
+    expect(mockWebviewView.webview.html).toContain('src/core.ts');
+    expect(mockWebviewView.webview.html).toContain('file-indicator');
+    expect(mockWebviewView.webview.html).toContain('3 Bugfixes');
   });
 
   it('renders all hotspots without truncating to 5', () => {

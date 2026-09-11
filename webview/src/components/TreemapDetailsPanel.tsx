@@ -13,6 +13,7 @@ import {
   mdiSourceCommit,
   mdiChevronDown,
   mdiChevronUp,
+  mdiChevronRight,
   mdiInformationOutline,
   mdiCompare,
   mdiCompareHorizontal,
@@ -20,8 +21,22 @@ import {
   mdiFilterVariant,
   mdiTicketOutline,
   mdiOpenInNew,
+  mdiHeartPulse,
+  mdiAlertCircleOutline,
+  mdiShieldCheckOutline,
 } from '@mdi/js';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
+
+const BIOMARKER_TYPE_NAMES: Record<string, { de: string; en: string }> = {
+  brain_method: { de: 'Brain Method (Gott-Methode)', en: 'Brain Method (God Function)' },
+  bumpy_road: { de: 'Bumpy Road (Unruhiger Kontrollfluss)', en: 'Bumpy Road' },
+  deep_nesting: { de: 'Tiefe Schachtelung', en: 'Deep Nesting' },
+  complex_conditional: { de: 'Komplexe Bedingung', en: 'Complex Conditional' },
+  nested_complexity: { de: 'Verschachtelte Komplexität', en: 'Nested Complexity' },
+  large_method: { de: 'Große Methode', en: 'Large Method' },
+  excess_parameters: { de: 'Zu viele Parameter', en: 'Excess Parameters' },
+  brain_class: { de: 'Brain Class (Gott-Klasse)', en: 'Brain Class (God Class)' },
+};
 
 export function isBugfixCommit(commit: {
   isFix?: boolean;
@@ -54,6 +69,8 @@ interface Props {
   onOpenExternal?: (url: string) => void;
   language: Language;
   isSidebarView?: boolean;
+  initialTab?: 'details' | 'hotspots' | 'health' | 'all';
+  mode?: 'details' | 'hotspots' | 'health' | 'all';
 }
 
 const getAuthorColor = (name: string) => {
@@ -81,10 +98,29 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
   onOpenExternal,
   language,
   isSidebarView = false,
+  initialTab,
+  mode = 'all',
 }) => {
+  const [detailsOpen, setDetailsOpen] = useState(true);
+  const [hotspotsOpen, setHotspotsOpen] = useState(true);
+  const [healthOpen, setHealthOpen] = useState(true);
   const [showAllCommits, setShowAllCommits] = useState(false);
   const [baseCommitHash, setBaseCommitHash] = useState<string | null>(null);
   const [filterBugfixes, setFilterBugfixes] = useState(false);
+
+  const showDetails = mode === 'all' || mode === 'details';
+  const showHotspots = mode === 'all' || mode === 'hotspots';
+  const showHealth = mode === 'all' || mode === 'health';
+
+  React.useEffect(() => {
+    if (initialTab === 'health') {
+      setHealthOpen(true);
+    } else if (initialTab === 'hotspots') {
+      setHotspotsOpen(true);
+    } else if (initialTab === 'details') {
+      setDetailsOpen(true);
+    }
+  }, [initialTab]);
 
   if (!node) return null;
 
@@ -92,6 +128,24 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
   const targetFilePath = node.path.split('#')[0].replace(/^\//, '');
   const defectPercent = Math.round((node.defectRatio ?? 0) * 100);
   const churnPercent = Math.round((node.churnScore ?? 0) * 100);
+
+  const rawScore = typeof node.codeHealth === 'number' ? node.codeHealth : undefined;
+  const biomarkers = node.biomarkers || [];
+  const score = rawScore !== undefined
+    ? rawScore
+    : biomarkers.length === 0
+    ? 10.0
+    : Math.max(1.0, 10.0 - biomarkers.reduce((acc, b) => acc + (b.severity === 'high' ? 2 : b.severity === 'medium' ? 1 : 0.5), 0));
+
+  const isHealthy = score >= 9.0;
+  const isProblematic = score >= 6.0 && score < 9.0;
+  const healthColor = isHealthy ? '#10b981' : isProblematic ? '#f59e0b' : '#ef4444';
+  const healthBg = isHealthy ? 'rgba(16, 185, 129, 0.12)' : isProblematic ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+  const statusLabel = isHealthy ? t.codeHealth.healthy : isProblematic ? t.codeHealth.problematic : t.codeHealth.unhealthy;
+
+  const critCount = biomarkers.filter((b) => b.severity === 'high' || (b.severity as any) === 'critical').length;
+  const warnCount = biomarkers.filter((b) => b.severity === 'medium' || (b.severity as any) === 'warning').length;
+  const infoCount = biomarkers.filter((b) => b.severity === 'low' || (b.severity as any) === 'info').length;
 
   const contributors = node.contributors ?? [];
   const commits = node.commits ?? [];
@@ -124,99 +178,18 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
     });
   };
 
-  return (
-    <div
-      style={{
-        position: isSidebarView ? 'relative' : 'absolute',
-        top: 0,
-        right: 0,
-        bottom: 0,
-        width: isSidebarView ? '100%' : 360,
-        maxWidth: isSidebarView ? '100%' : '90vw',
-        height: isSidebarView ? '100%' : undefined,
-        boxSizing: 'border-box',
-        backgroundColor: 'var(--bg-secondary)',
-        borderLeft: isSidebarView ? 'none' : '1px solid var(--border-color)',
-        boxShadow: isSidebarView ? 'none' : '-4px 0 24px rgba(0, 0, 0, 0.5)',
-        zIndex: isSidebarView ? 1 : 50,
-        display: 'flex',
-        flexDirection: 'column',
-        padding: isSidebarView ? '12px 14px' : 16,
-        gap: 12,
-        overflowY: 'auto',
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-            color: 'var(--accent-color)',
-          }}
-        >
-          {node.type}
-        </span>
-        <button
-          onClick={onClose}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-            padding: 4,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          title={t.close}
-        >
-          <Icon path={mdiClose} size={0.75} />
-        </button>
-      </div>
-
-      <div style={{ fontWeight: 600, fontSize: 15, wordBreak: 'break-all' }}>
-        {node.name}
-      </div>
-
-      <div style={{ fontSize: 11, color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
-        {node.path}
-      </div>
-
-      <button
-        onClick={() => onOpenFile(targetFilePath, node.startLine, node.endLine)}
-        style={{
-          backgroundColor: 'var(--button-bg)',
-          color: 'var(--button-fg)',
-          border: 'none',
-          borderRadius: 4,
-          padding: '8px 12px',
-          cursor: 'pointer',
-          fontWeight: 500,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-          marginTop: 4,
-        }}
-      >
-        <Icon path={mdiOpenInApp} size={0.8} />
-        <span>{t.jumpToCode}</span>
-      </button>
-
-      {/* Metrics Grid */}
+  const renderDetailsContent = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr',
           gap: 8,
-          marginTop: 8,
         }}
       >
         <div
           style={{
-            backgroundColor: 'var(--bg-card)',
+            backgroundColor: 'rgba(255, 255, 255, 0.03)',
             padding: 8,
             borderRadius: 4,
             border: '1px solid var(--border-color)',
@@ -232,151 +205,22 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
         </div>
 
         <div
-          onClick={() => {
-            if (filterBugfixes) {
-              setFilterBugfixes(false);
-            }
-          }}
           style={{
-            backgroundColor: 'var(--bg-card)',
-            padding: 8,
-            borderRadius: 4,
-            border: '1px solid var(--border-color)',
-            cursor: filterBugfixes ? 'pointer' : 'default',
-            transition: 'all 0.15s ease',
-            userSelect: 'none',
-          }}
-          title={filterBugfixes ? t.showAllCommitsTooltip : undefined}
-          onMouseEnter={(e) => {
-            if (filterBugfixes) {
-              e.currentTarget.style.borderColor = 'var(--accent-color)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-color)';
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, fontSize: 10, color: 'var(--text-secondary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Icon path={mdiGit} size={0.6} />
-              <span>{t.metrics.commits}</span>
-            </div>
-            {filterBugfixes && (
-              <span
-                style={{
-                  fontSize: 9,
-                  color: 'var(--accent-color)',
-                  textDecoration: 'underline',
-                }}
-              >
-                {t.allCommits}
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 'bold', marginTop: 2 }}>
-            {node.commitCount || 0}
-          </div>
-        </div>
-
-        <div
-          onClick={() => {
-            if (hasBugfixes) {
-              setFilterBugfixes((prev) => !prev);
-            }
-          }}
-          style={{
-            backgroundColor: filterBugfixes ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-card)',
-            padding: 8,
-            borderRadius: 4,
-            border: filterBugfixes ? '1px solid #ef4444' : '1px solid var(--border-color)',
-            cursor: hasBugfixes ? 'pointer' : 'default',
-            transition: 'all 0.15s ease',
-            userSelect: 'none',
-          }}
-          title={
-            hasBugfixes
-              ? (filterBugfixes ? t.filterActiveTooltip : t.filterByBugfixesTooltip)
-              : undefined
-          }
-          onMouseEnter={(e) => {
-            if (hasBugfixes && !filterBugfixes) {
-              e.currentTarget.style.borderColor = '#ef4444';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!filterBugfixes) {
-              e.currentTarget.style.borderColor = 'var(--border-color)';
-            }
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, fontSize: 10, color: 'var(--text-secondary)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Icon path={mdiBugOutline} size={0.6} color="#ef4444" />
-              <span style={{ color: filterBugfixes ? '#ef4444' : undefined, fontWeight: filterBugfixes ? 700 : undefined }}>
-                {t.metrics.bugFixes}
-              </span>
-            </div>
-            {filterBugfixes && (
-              <span
-                style={{
-                  fontSize: 9,
-                  fontWeight: 700,
-                  backgroundColor: '#ef4444',
-                  color: '#fff',
-                  padding: '1px 5px',
-                  borderRadius: 3,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 2,
-                }}
-              >
-                <Icon path={mdiCheck} size={0.35} />
-                {t.filterBugfixes}
-              </span>
-            )}
-          </div>
-          <div style={{ fontSize: 16, fontWeight: 'bold', color: '#ef4444', marginTop: 2 }}>
-            {node.fixCount || 0} ({defectPercent}%)
-          </div>
-        </div>
-
-        <div
-          style={{
-            backgroundColor: 'var(--bg-card)',
+            backgroundColor: 'rgba(255, 255, 255, 0.03)',
             padding: 8,
             borderRadius: 4,
             border: '1px solid var(--border-color)',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--text-secondary)' }}>
-            <Icon path={mdiFire} size={0.6} color="#f59e0b" />
-            <span>{t.metrics.churnScore}</span>
+            <Icon path={mdiGit} size={0.6} />
+            <span>{t.metrics.commits}</span>
           </div>
-          <div style={{ fontSize: 16, fontWeight: 'bold', color: '#f59e0b', marginTop: 2 }}>
-            {churnPercent}%
+          <div style={{ fontSize: 16, fontWeight: 'bold', marginTop: 2 }}>
+            {node.commitCount || 0}
           </div>
         </div>
       </div>
-
-      {((node.linesAdded ?? 0) > 0 || (node.linesDeleted ?? 0) > 0) && (
-        <div
-          style={{
-            backgroundColor: 'var(--bg-card)',
-            padding: 8,
-            borderRadius: 4,
-            border: '1px solid var(--border-color)',
-            fontSize: 12,
-          }}
-        >
-          <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4 }}>
-            {t.metrics.lineChurn}
-          </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <span style={{ color: '#22c55e', fontWeight: 600 }}>+{node.linesAdded?.toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}</span>
-            <span style={{ color: '#ef4444', fontWeight: 600 }}>-{node.linesDeleted?.toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}</span>
-          </div>
-        </div>
-      )}
 
       {node.startLine && (
         <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
@@ -384,14 +228,13 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
         </div>
       )}
 
-      {node.commitCount === 0 ? (
+      {node.commitCount === 0 && (
         <div
           style={{
             backgroundColor: 'rgba(59, 130, 246, 0.08)',
             border: '1px solid rgba(59, 130, 246, 0.25)',
             borderRadius: 6,
             padding: '10px 12px',
-            marginTop: 4,
             display: 'flex',
             gap: 10,
             alignItems: 'flex-start',
@@ -409,8 +252,526 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
             </span>
           </div>
         </div>
+      )}
+    </div>
+  );
+
+  const renderHealthContent = () => (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 26, fontWeight: 800, color: healthColor }}>
+            {score.toFixed(1)}
+          </span>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>/ 10.0</span>
+        </div>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: healthColor,
+            backgroundColor: healthBg,
+            padding: '2px 8px',
+            borderRadius: 4,
+            border: `1px solid ${healthColor}33`,
+          }}
+        >
+          {statusLabel}
+        </span>
+      </div>
+
+      {/* Health Progress Bar */}
+      <div
+        style={{
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: 'var(--border-color)',
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.max(5, Math.min(100, ((score - 1) / 9) * 100))}%`,
+            height: '100%',
+            backgroundColor: healthColor,
+            transition: 'width 0.3s ease',
+            borderRadius: 3,
+          }}
+        />
+      </div>
+
+      {/* Severity Summary Pills */}
+      {biomarkers.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+              padding: '2px 6px',
+              borderRadius: 4,
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {biomarkers.length} {t.codeHealth.biomarkersCount}
+          </span>
+          {critCount > 0 && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                color: '#ef4444',
+                padding: '2px 6px',
+                borderRadius: 4,
+              }}
+            >
+              {critCount} {t.codeHealth.severityHigh}
+            </span>
+          )}
+          {warnCount > 0 && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                backgroundColor: 'rgba(245, 158, 11, 0.15)',
+                color: '#f59e0b',
+                padding: '2px 6px',
+                borderRadius: 4,
+              }}
+            >
+              {warnCount} {t.codeHealth.severityMedium}
+            </span>
+          )}
+          {infoCount > 0 && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                color: '#3b82f6',
+                padding: '2px 6px',
+                borderRadius: 4,
+              }}
+            >
+              {infoCount} {t.codeHealth.severityLow}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Biomarkers List */}
+      {biomarkers.length > 0 ? (
+        <div style={{ marginTop: 4, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            {t.codeHealth.biomarkersTitle} ({biomarkers.length})
+          </div>
+          {biomarkers.map((b, idx) => {
+            const bTypeName = BIOMARKER_TYPE_NAMES[b.type]?.[language] || b.type;
+            const isCrit = b.severity === 'high' || (b.severity as any) === 'critical';
+            const isWarn = b.severity === 'medium' || (b.severity as any) === 'warning';
+            const chipColor = isCrit ? '#ef4444' : isWarn ? '#f59e0b' : '#3b82f6';
+            const chipBg = isCrit ? 'rgba(239, 68, 68, 0.12)' : isWarn ? 'rgba(245, 158, 11, 0.12)' : 'rgba(59, 130, 246, 0.12)';
+            const severityLabel = isCrit ? t.codeHealth.severityHigh : isWarn ? t.codeHealth.severityMedium : t.codeHealth.severityLow;
+            const fnName = b.functionName || (b as any).name;
+
+            return (
+              <div
+                key={idx}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 4,
+                  backgroundColor: chipBg,
+                  border: `1px solid ${chipColor}44`,
+                  fontSize: 11,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ fontWeight: 700, color: chipColor, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Icon path={mdiAlertCircleOutline} size={0.55} color={chipColor} />
+                    {bTypeName}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span
+                      style={{
+                        fontSize: 9,
+                        fontWeight: 700,
+                        color: chipColor,
+                        border: `1px solid ${chipColor}66`,
+                        padding: '0 4px',
+                        borderRadius: 3,
+                      }}
+                    >
+                      {severityLabel}
+                    </span>
+                    {b.startLine && (
+                      <button
+                        onClick={() => onOpenFile(targetFilePath, b.startLine, b.endLine)}
+                        style={{
+                          background: 'var(--button-bg)',
+                          border: 'none',
+                          color: 'var(--button-fg)',
+                          cursor: 'pointer',
+                          padding: '1px 6px',
+                          borderRadius: 3,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          fontFamily: 'var(--vscode-editor-font-family, monospace)',
+                        }}
+                        title={t.jumpToCode}
+                      >
+                        L{b.startLine}{b.endLine && b.endLine !== b.startLine ? `-${b.endLine}` : ''}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {fnName && (
+                  <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: 11, marginBottom: 2 }}>
+                    <code>{fnName}</code>
+                  </div>
+                )}
+                <div style={{ color: 'var(--text-secondary)', fontSize: 10, lineHeight: 1.4 }}>
+                  {b.details}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
-        <>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 11,
+            color: '#10b981',
+            padding: '8px 10px',
+            backgroundColor: 'rgba(16, 185, 129, 0.08)',
+            borderRadius: 4,
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+          }}
+        >
+          <Icon path={mdiShieldCheckOutline} size={0.7} color="#10b981" />
+          <div>
+            <div style={{ fontWeight: 600 }}>{t.codeHealth.cleanCodeTitle}</div>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)' }}>{t.codeHealth.cleanCodeDesc}</div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <div
+      style={{
+        position: isSidebarView ? 'relative' : 'absolute',
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: isSidebarView ? '100%' : 360,
+        maxWidth: isSidebarView ? '100%' : '90vw',
+        height: isSidebarView ? '100%' : undefined,
+        boxSizing: 'border-box',
+        backgroundColor: 'var(--bg-secondary)',
+        borderLeft: isSidebarView ? 'none' : '1px solid var(--border-color)',
+        boxShadow: isSidebarView ? 'none' : '-4px 0 24px rgba(0, 0, 0, 0.5)',
+        zIndex: isSidebarView ? 1 : 50,
+        display: 'flex',
+        flexDirection: 'column',
+        padding: isSidebarView ? '8px 10px' : 16,
+        gap: isSidebarView ? 10 : 12,
+        overflowY: 'auto',
+      }}
+    >
+      {/* Single-line File Indicator */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: 11,
+          padding: '2px 0 6px 0',
+          borderBottom: '1px solid var(--border-color)',
+          color: 'var(--text-secondary)',
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+          textOverflow: 'ellipsis',
+          flexShrink: 0,
+        }}
+        title={`${node.name} (${targetFilePath})`}
+      >
+        <span
+          style={{
+            fontSize: 9,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            color: 'var(--accent-color)',
+            backgroundColor: 'rgba(59, 130, 246, 0.12)',
+            padding: '1px 5px',
+            borderRadius: 3,
+            flexShrink: 0,
+          }}
+        >
+          {node.type}
+        </span>
+        <span
+          style={{
+            fontWeight: 600,
+            color: 'var(--text-primary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          {node.name}
+        </span>
+        <span style={{ opacity: 0.4, flexShrink: 0 }}>—</span>
+        <span
+          style={{
+            fontFamily: 'var(--vscode-editor-font-family, monospace)',
+            fontSize: 10,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {targetFilePath}
+        </span>
+      </div>
+
+      {/* 1. Details Section */}
+      {showDetails && (
+        mode === 'details' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+            {renderDetailsContent()}
+          </div>
+        ) : (
+          <div
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderRadius: 6,
+              border: '1px solid var(--border-color)',
+              overflow: 'hidden',
+            }}
+          >
+            <button
+              onClick={() => setDetailsOpen((prev) => !prev)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '9px 12px',
+                backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                border: 'none',
+                borderBottom: detailsOpen ? '1px solid var(--border-color)' : 'none',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                fontSize: 12,
+                fontWeight: 600,
+                userSelect: 'none',
+                transition: 'background-color 0.15s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon path={mdiInformationOutline} size={0.65} color="var(--accent-color)" />
+                <span>{t.tabs.details}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                  {(node.loc || 0).toLocaleString(language === 'de' ? 'de-DE' : 'en-US')} LOC
+                </span>
+                <Icon path={detailsOpen ? mdiChevronDown : mdiChevronRight} size={0.65} color="var(--text-secondary)" />
+              </div>
+            </button>
+
+            {detailsOpen && (
+              <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {renderDetailsContent()}
+              </div>
+            )}
+          </div>
+        )
+      )}
+
+      {/* 2. Hotspots Section */}
+      {showHotspots && (
+        <div
+          style={{
+            backgroundColor: 'var(--bg-card)',
+            borderRadius: 6,
+            border: '1px solid var(--border-color)',
+            overflow: 'hidden',
+          }}
+        >
+        <button
+          onClick={() => setHotspotsOpen((prev) => !prev)}
+          style={{
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '9px 12px',
+            backgroundColor: 'rgba(255, 255, 255, 0.02)',
+            border: 'none',
+            borderBottom: hotspotsOpen ? '1px solid var(--border-color)' : 'none',
+            cursor: 'pointer',
+            color: 'var(--text-primary)',
+            fontSize: 12,
+            fontWeight: 600,
+            userSelect: 'none',
+            transition: 'background-color 0.15s ease',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon path={mdiFire} size={0.65} color="#f59e0b" />
+            <span>{t.tabs.hotspots}</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              {churnPercent}% {t.metrics.churnScore}
+            </span>
+            <Icon path={hotspotsOpen ? mdiChevronDown : mdiChevronRight} size={0.65} color="var(--text-secondary)" />
+          </div>
+        </button>
+
+        {hotspotsOpen && (
+          <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 8,
+            }}
+          >
+            <div
+              onClick={() => {
+                if (filterBugfixes) {
+                  setFilterBugfixes(false);
+                }
+              }}
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                padding: 8,
+                borderRadius: 4,
+                border: '1px solid var(--border-color)',
+                cursor: filterBugfixes ? 'pointer' : 'default',
+                transition: 'all 0.15s ease',
+                userSelect: 'none',
+              }}
+              title={filterBugfixes ? t.showAllCommitsTooltip : undefined}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, fontSize: 10, color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Icon path={mdiGit} size={0.6} />
+                  <span>{t.metrics.commits}</span>
+                </div>
+                {filterBugfixes && (
+                  <span style={{ fontSize: 9, color: 'var(--accent-color)', textDecoration: 'underline' }}>
+                    {t.allCommits}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 'bold', marginTop: 2 }}>
+                {node.commitCount || 0}
+              </div>
+            </div>
+
+            <div
+              onClick={() => {
+                if (hasBugfixes) {
+                  setFilterBugfixes((prev) => !prev);
+                }
+              }}
+              style={{
+                backgroundColor: filterBugfixes ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-card)',
+                padding: 8,
+                borderRadius: 4,
+                border: filterBugfixes ? '1px solid #ef4444' : '1px solid var(--border-color)',
+                cursor: hasBugfixes ? 'pointer' : 'default',
+                transition: 'all 0.15s ease',
+                userSelect: 'none',
+              }}
+              title={
+                hasBugfixes
+                  ? (filterBugfixes ? t.filterActiveTooltip : t.filterByBugfixesTooltip)
+                  : undefined
+              }
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 4, fontSize: 10, color: 'var(--text-secondary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Icon path={mdiBugOutline} size={0.6} color="#ef4444" />
+                  <span style={{ color: filterBugfixes ? '#ef4444' : undefined, fontWeight: filterBugfixes ? 700 : undefined }}>
+                    {t.metrics.bugFixes}
+                  </span>
+                </div>
+                {filterBugfixes && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      backgroundColor: '#ef4444',
+                      color: '#fff',
+                      padding: '1px 5px',
+                      borderRadius: 3,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 2,
+                    }}
+                  >
+                    <Icon path={mdiCheck} size={0.35} />
+                    {t.filterBugfixes}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 'bold', color: '#ef4444', marginTop: 2 }}>
+                {node.fixCount || 0} ({defectPercent}%)
+              </div>
+            </div>
+
+            <div
+              style={{
+                backgroundColor: 'var(--bg-card)',
+                padding: 8,
+                borderRadius: 4,
+                border: '1px solid var(--border-color)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: 'var(--text-secondary)' }}>
+                <Icon path={mdiFire} size={0.6} color="#f59e0b" />
+                <span>{t.metrics.churnScore}</span>
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 'bold', color: '#f59e0b', marginTop: 2 }}>
+                {churnPercent}%
+              </div>
+            </div>
+
+            {((node.linesAdded ?? 0) > 0 || (node.linesDeleted ?? 0) > 0) && (
+              <div
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  padding: 8,
+                  borderRadius: 4,
+                  border: '1px solid var(--border-color)',
+                  fontSize: 12,
+                }}
+              >
+                <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                  {t.metrics.lineChurn}
+                </div>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <span style={{ color: '#22c55e', fontWeight: 600 }}>+{node.linesAdded?.toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}</span>
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>-{node.linesDeleted?.toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Hotspots: Contributors & Commit History */}
+          {node.commitCount !== 0 && (
+            <>
           {/* Contributors Section */}
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -980,6 +1341,75 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
             )}
           </div>
         </>
+      )}
+    </div>
+  )}
+</div>
+)}
+
+      {/* 3. Code Health Section */}
+      {showHealth && (
+        mode === 'health' ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+            {renderHealthContent()}
+          </div>
+        ) : (
+          <div
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderRadius: 6,
+              border: `1px solid ${healthColor}40`,
+              overflow: 'hidden',
+            }}
+          >
+            <button
+              onClick={() => setHealthOpen((prev) => !prev)}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '9px 12px',
+                backgroundColor: 'rgba(255, 255, 255, 0.02)',
+                border: 'none',
+                borderBottom: healthOpen ? `1px solid ${healthColor}30` : 'none',
+                cursor: 'pointer',
+                color: 'var(--text-primary)',
+                fontSize: 12,
+                fontWeight: 600,
+                userSelect: 'none',
+                transition: 'background-color 0.15s ease',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon path={mdiHeartPulse} size={0.65} color={healthColor} />
+                <span>{t.tabs.health}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: healthColor,
+                    backgroundColor: healthBg,
+                    padding: '2px 7px',
+                    borderRadius: 4,
+                    border: `1px solid ${healthColor}33`,
+                  }}
+                >
+                  {score.toFixed(1)} / 10.0
+                </span>
+                <Icon path={healthOpen ? mdiChevronDown : mdiChevronRight} size={0.65} color="var(--text-secondary)" />
+              </div>
+            </button>
+
+            {healthOpen && (
+              <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {renderHealthContent()}
+              </div>
+            )}
+          </div>
+        )
       )}
     </div>
   );
