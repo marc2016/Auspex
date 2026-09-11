@@ -91,7 +91,7 @@
         },
         {
           "command": "auspex.openSelectedFile",
-          "when": "view == auspex.detailsView || view == auspex.healthView || (view == auspex.sidebarView && auspex.hasSelectedFile)",
+          "when": "view == auspex.detailsView || view == auspex.healthView || view == auspex.couplingView || (view == auspex.sidebarView && auspex.hasSelectedFile)",
           "group": "navigation@1"
         }
       ]
@@ -126,6 +126,11 @@
           "type": "webview",
           "id": "auspex.healthView",
           "name": "Auspex Health"
+        },
+        {
+          "type": "webview",
+          "id": "auspex.couplingView",
+          "name": "Auspex Kopplung"
         }
       ]
     },

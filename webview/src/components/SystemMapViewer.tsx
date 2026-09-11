@@ -9,6 +9,7 @@ import {
   getHeatColor,
   getGrowthColor,
   getRecencyColor,
+  getCouplingColor,
   renderTooltipHtml,
 } from './TreemapViewer';
 
@@ -69,6 +70,8 @@ export const SystemMapViewer: React.FC<Props> = ({
   const getNodeColor = (node: TreeNode, isLight: boolean): string => {
     if (colorMetric === 'health') {
       return getCodeHealthColor(node.codeHealth);
+    } else if (colorMetric === 'coupling') {
+      return getCouplingColor(node, isLight);
     } else if (colorMetric === 'churn') {
       return getHeatColor(node.churnScore, isLight);
     } else if (colorMetric === 'fixes') {

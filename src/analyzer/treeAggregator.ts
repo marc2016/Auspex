@@ -6,13 +6,23 @@ import type {
   HotspotItem,
   CommitInfo,
   ContributorStat,
+  ProjectCouplingPair,
+  CouplingGraphData,
+  CouplingGraphNode,
+  CouplingGraphLink,
 } from './types';
 
 export class TreeAggregator {
   buildTree(
     files: ParsedFileInfo[],
-    commitStats: Map<string, FileCommitStat>
-  ): { tree: TreeNode; hotspots: HotspotItem[] } {
+    commitStats: Map<string, FileCommitStat>,
+    projectCouplings?: ProjectCouplingPair[]
+  ): {
+    tree: TreeNode;
+    hotspots: HotspotItem[];
+    projectCouplings?: ProjectCouplingPair[];
+    couplingGraph?: CouplingGraphData;
+  } {
     const root: TreeNode = {
       name: 'root',
       path: '/',
@@ -218,6 +228,7 @@ export class TreeAggregator {
         lastModifiedAt,
         contributors: fileContributors,
         commits: fileCommits,
+        temporalCoupling: fileStats?.temporalCoupling,
         codeHealth: file.codeHealth ?? 10.0,
         biomarkers: file.biomarkers || [],
         children: fileChildren.length > 0 ? fileChildren : undefined,
@@ -242,7 +253,41 @@ export class TreeAggregator {
     // Compute hotspot ranking (files with high churn and high loc)
     const hotspots = this.extractHotspots(files, commitStats, maxCommits);
 
-    return { tree: root, hotspots };
+    // Assemble coupling network graph for D3 visualization
+    let couplingGraph: CouplingGraphData | undefined;
+    if (projectCouplings && projectCouplings.length > 0) {
+      const nodeSet = new Set<string>();
+      const links: CouplingGraphLink[] = projectCouplings.map((p) => {
+        nodeSet.add(p.fileA);
+        nodeSet.add(p.fileB);
+        return {
+          source: p.fileA,
+          target: p.fileB,
+          coChanges: p.coChanges,
+          degree: Math.max(p.degreeA, p.degreeB),
+        };
+      });
+
+      const parsedMap = new Map<string, ParsedFileInfo>();
+      for (const f of files) parsedMap.set(f.filePath, f);
+
+      const nodes: CouplingGraphNode[] = Array.from(nodeSet).map((filePath) => {
+        const stats = commitStats.get(filePath);
+        const parsed = parsedMap.get(filePath);
+        return {
+          id: filePath,
+          name: path.basename(filePath),
+          loc: parsed?.loc ?? 0,
+          commitCount: stats?.commitCount ?? 0,
+          codeHealth: parsed?.codeHealth ?? 10.0,
+          churnScore: stats ? Math.min(1, stats.commitCount / Math.max(maxCommits, 1)) : 0,
+        };
+      });
+
+      couplingGraph = { nodes, links };
+    }
+
+    return { tree: root, hotspots, projectCouplings, couplingGraph };
   }
 
   private aggregateLoc(node: TreeNode): number {

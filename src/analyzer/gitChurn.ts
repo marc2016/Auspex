@@ -1,5 +1,6 @@
 import { simpleGit } from 'simple-git';
-import type { FileCommitStat, ContributorStat, CommitInfo } from './types';
+import type { FileCommitStat, ContributorStat, CommitInfo, ProjectCouplingPair } from './types';
+import { TemporalCouplingAnalyzer } from './temporalCoupling';
 
 export function isBugfixMessage(message: string): boolean {
   const subject = (message || '').toLowerCase().trim();
@@ -15,8 +16,10 @@ export function isBugfixMessage(message: string): boolean {
 }
 
 export class GitChurnAnalyzer {
+  public lastProjectCouplings: ProjectCouplingPair[] = [];
+
   /**
-   * Analyzes the git history for the given directory.
+   * Runs git log with numstat to extract commit counts, churn lines, and author activity.
    * Returns a map of relative file paths to FileCommitStat.
    */
   async analyze(workspacePath: string): Promise<Map<string, FileCommitStat>> {
@@ -63,12 +66,19 @@ export class GitChurnAnalyzer {
       Map<string, { commits: number; linesAdded: number; linesDeleted: number }>
     >();
     const fileCommitsMap = new Map<string, CommitInfo[]>();
+    const couplingAnalyzer = new TemporalCouplingAnalyzer();
+    let currentCommitFiles: string[] = [];
 
     for (const rawLine of lines) {
       const line = rawLine.trim();
       if (!line) continue;
 
       if (line.startsWith('COMMIT:')) {
+        if (currentCommitFiles.length > 0) {
+          couplingAnalyzer.recordCommitFiles(currentCommitFiles);
+          currentCommitFiles = [];
+        }
+
         isFix = false;
         isFeat = false;
         isRefactor = false;
@@ -184,11 +194,25 @@ export class GitChurnAnalyzer {
         existing.linesAdded += added;
         existing.linesDeleted += deleted;
         contribMap.set(currentAuthor, existing);
+
+        // Record for temporal coupling
+        currentCommitFiles.push(filePath);
       }
     }
 
-    // Finalize contributors and commits per file
+    // Flush last commit files for temporal coupling
+    if (currentCommitFiles.length > 0) {
+      couplingAnalyzer.recordCommitFiles(currentCommitFiles);
+    }
+
+    // Finalize temporal coupling
+    const { fileCouplings, projectCouplings } = couplingAnalyzer.finalize(statsMap);
+    this.lastProjectCouplings = projectCouplings;
+
+    // Finalize contributors, commits, and temporal coupling per file
     for (const [filePath, stats] of statsMap.entries()) {
+      stats.temporalCoupling = fileCouplings.get(filePath) || [];
+
       const commits = fileCommitsMap.get(filePath) || [];
       commits.sort((a, b) => b.timestamp - a.timestamp);
       stats.commits = commits;

@@ -15,12 +15,13 @@ import {
   mdiCalendarRangeOutline,
   mdiCircleMultipleOutline,
   mdiChartBoxOutline,
+  mdiGraphOutline,
 } from '@mdi/js';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 
 interface Props {
-  chartType: 'treemap' | 'systemMap';
-  onChartTypeChange: (type: 'treemap' | 'systemMap') => void;
+  chartType: 'treemap' | 'systemMap' | 'couplingGraph';
+  onChartTypeChange: (type: 'treemap' | 'systemMap' | 'couplingGraph') => void;
   viewMode: TreemapViewMode;
   onViewModeChange: (mode: TreemapViewMode) => void;
   sizeMetric: SizeMetric;
@@ -31,6 +32,8 @@ interface Props {
   onTimeframeChange: (tf: TimeframeOption) => void;
   maxItems: number;
   onMaxItemsChange: (val: number) => void;
+  minCouplingThreshold?: number;
+  onMinCouplingThresholdChange?: (val: number) => void;
   sourceCodeOnly: boolean;
   onSourceCodeOnlyChange: (val: boolean) => void;
   onRescan: () => void;
@@ -59,6 +62,8 @@ export const TopBar: React.FC<Props> = ({
   onTimeframeChange,
   maxItems,
   onMaxItemsChange,
+  minCouplingThreshold = 0.2,
+  onMinCouplingThresholdChange,
   sourceCodeOnly,
   onSourceCodeOnlyChange,
   onRescan,
@@ -79,7 +84,7 @@ export const TopBar: React.FC<Props> = ({
           </span>
         </div>
 
-        {/* Chart Type Toggle: Treemap vs System Map */}
+        {/* Chart Type Toggle: Treemap vs System Map vs Coupling Graph */}
         <div className="viewmode-group" style={{ marginRight: '8px' }}>
           <button
             onClick={() => onChartTypeChange('treemap')}
@@ -96,6 +101,14 @@ export const TopBar: React.FC<Props> = ({
           >
             <Icon path={mdiCircleMultipleOutline} size={0.65} />
             <span className="viewmode-text">{t.chartType.systemMap}</span>
+          </button>
+          <button
+            onClick={() => onChartTypeChange('couplingGraph')}
+            className={`viewmode-btn ${chartType === 'couplingGraph' ? 'active' : ''}`}
+            title={t.chartType.couplingGraph}
+          >
+            <Icon path={mdiGraphOutline} size={0.65} />
+            <span className="viewmode-text">{t.chartType.couplingGraph}</span>
           </button>
         </div>
 
@@ -150,6 +163,7 @@ export const TopBar: React.FC<Props> = ({
             <option value="growth">{t.colorOptions.growth}</option>
             <option value="recency">{t.colorOptions.recency}</option>
             <option value="health">{t.colorOptions.health}</option>
+            <option value="coupling">{t.colorOptions.coupling}</option>
           </select>
         </div>
 
@@ -170,6 +184,24 @@ export const TopBar: React.FC<Props> = ({
             <option value="2y">{t.timeframeOptions['2y']}</option>
           </select>
         </div>
+
+        {/* Min Coupling Filter (Coupling Graph only) */}
+        {chartType === 'couplingGraph' && onMinCouplingThresholdChange && (
+          <div className="control-item" title={t.coupling.minCoupling}>
+            <Icon path={mdiFilterOutline} size={0.65} color="var(--text-secondary)" />
+            <span className="control-label">{t.coupling.minCoupling}</span>
+            <select
+              value={minCouplingThreshold}
+              onChange={(e) => onMinCouplingThresholdChange(Number(e.target.value))}
+              className="topbar-select"
+            >
+              <option value={0.2}>{t.coupling.minCouplingOptions['0.2']}</option>
+              <option value={0.3}>{t.coupling.minCouplingOptions['0.3']}</option>
+              <option value={0.5}>{t.coupling.minCouplingOptions['0.5']}</option>
+              <option value={0.7}>{t.coupling.minCouplingOptions['0.7']}</option>
+            </select>
+          </div>
+        )}
 
         {/* Item Limit Filter (Treemap only) */}
         {chartType === 'treemap' && (

@@ -5,7 +5,7 @@ import { getCodeHealthColor } from './SystemMapViewer';
 
 export type TreemapViewMode = 'files' | 'classes' | 'functions' | 'hierarchy';
 export type SizeMetric = 'loc' | 'churn' | 'fixes' | 'added';
-export type ColorMetric = 'fixes' | 'churn' | 'growth' | 'recency' | 'health' | 'loc';
+export type ColorMetric = 'fixes' | 'churn' | 'growth' | 'recency' | 'health' | 'coupling' | 'loc';
 
 interface Props {
   tree: TreeNode;
@@ -14,6 +14,7 @@ interface Props {
   colorMetric?: ColorMetric;
   maxItems?: number;
   onNodeClick?: (node: TreeNode) => void;
+  selectedNode?: TreeNode | null;
 }
 
 function useIsLightTheme(): boolean {
@@ -115,6 +116,18 @@ export function getRecencyColor(lastModifiedAt: number | undefined, isLight: boo
   const g = Math.round(70 + (1 - freshness) * (163 - 70));
   const b = Math.round(229 + (1 - freshness) * (184 - 229));
   return `rgba(${r}, ${g}, ${b}, 0.85)`;
+}
+
+export function getCouplingColor(node: TreeNode, isLight: boolean): string {
+  const maxCoupling =
+    node.temporalCoupling && node.temporalCoupling.length > 0
+      ? Math.max(...node.temporalCoupling.map((c) => c.couplingDegree))
+      : 0;
+
+  if (maxCoupling <= 0) {
+    return isLight ? 'rgba(226, 232, 240, 0.85)' : 'rgba(51, 65, 85, 0.6)';
+  }
+  return getHeatColor(maxCoupling, isLight);
 }
 
 export function collectNodes(
@@ -264,6 +277,19 @@ export function renderTooltipHtml(n: TreeNode, isLight: boolean): string {
             </div>`
           : ''
       }
+      ${
+        n.temporalCoupling && n.temporalCoupling.length > 0
+          ? (() => {
+              const maxCoupling = Math.max(...n.temporalCoupling.map((c) => c.couplingDegree));
+              const maxPct = Math.round(maxCoupling * 100);
+              const coupColor = maxCoupling >= 0.7 ? '#ef4444' : maxCoupling >= 0.4 ? '#f59e0b' : '#10b981';
+              return `<div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-top: 3px;">
+                <span style="color: ${mutedColor};">Max. Kopplung:</span>
+                <strong style="color: ${coupColor}; font-weight: 600;">${maxPct}% (${n.temporalCoupling.length} Partner)</strong>
+              </div>`;
+            })()
+          : ''
+      }
     </div>
   `;
 }
@@ -275,12 +301,24 @@ export const TreemapViewer: React.FC<Props> = ({
   colorMetric = 'fixes',
   maxItems = 100,
   onNodeClick,
+  selectedNode,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const isLight = useIsLightTheme();
   const [dimensions, setDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
+
+  const selectedCoupledMap = useMemo(() => {
+    if (!selectedNode?.temporalCoupling || selectedNode.temporalCoupling.length === 0) {
+      return null;
+    }
+    const map = new Map<string, number>();
+    for (const c of selectedNode.temporalCoupling) {
+      map.set(c.partnerPath, c.couplingDegree);
+    }
+    return map;
+  }, [selectedNode]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -316,6 +354,8 @@ export const TreemapViewer: React.FC<Props> = ({
   const getNodeColor = (node: TreeNode): string => {
     if (colorMetric === 'health') {
       return getCodeHealthColor(node.codeHealth);
+    } else if (colorMetric === 'coupling') {
+      return getCouplingColor(node, isLight);
     } else if (colorMetric === 'churn') {
       return getHeatColor(node.churnScore, isLight);
     } else if (colorMetric === 'fixes') {
@@ -441,6 +481,8 @@ export const TreemapViewer: React.FC<Props> = ({
         }
       });
 
+    const hasActiveSelection = Boolean(selectedNode);
+
     cell
       .append('rect')
       .attr('width', (d: any) => Math.max(0, d.x1 - d.x0))
@@ -448,9 +490,33 @@ export const TreemapViewer: React.FC<Props> = ({
       .attr('rx', 3)
       .attr('ry', 3)
       .attr('fill', (d: any) => getNodeColor(d.data))
-      .attr('stroke', borderColor)
-      .attr('stroke-width', 1)
-      .style('transition', 'filter 0.15s ease');
+      .attr('stroke', (d: any) => {
+        const isSelected = selectedNode && d.data.path === selectedNode.path;
+        const isCoupled = selectedCoupledMap?.has(d.data.path);
+        if (isSelected) return isLight ? '#2563eb' : '#38bdf8';
+        if (isCoupled) return '#f59e0b';
+        return borderColor;
+      })
+      .attr('stroke-width', (d: any) => {
+        const isSelected = selectedNode && d.data.path === selectedNode.path;
+        const isCoupled = selectedCoupledMap?.has(d.data.path);
+        if (isSelected) return 3;
+        if (isCoupled) return 2.5;
+        return 1;
+      })
+      .attr('stroke-dasharray', (d: any) => {
+        const isSelected = selectedNode && d.data.path === selectedNode.path;
+        const isCoupled = selectedCoupledMap?.has(d.data.path);
+        if (!isSelected && isCoupled) return '4,2';
+        return null;
+      })
+      .style('opacity', (d: any) => {
+        if (!hasActiveSelection) return 1.0;
+        const isSelected = d.data.path === selectedNode?.path;
+        const isCoupled = selectedCoupledMap?.has(d.data.path);
+        return isSelected || isCoupled ? 1.0 : 0.35;
+      })
+      .style('transition', 'filter 0.15s ease, opacity 0.2s ease');
 
     // Centered label rendering matching ECharts design with Name and LOC in block
     cell.each(function (this: SVGGElement, d: any) {
@@ -478,8 +544,11 @@ export const TreemapViewer: React.FC<Props> = ({
 
       if (canFitTwoLines) {
         const loc = (n.loc ?? 0).toLocaleString();
+        const coupledDegree = selectedCoupledMap?.get(n.path);
         let metricText = `${loc} LOC`;
-        if (n.commitCount && n.commitCount > 0 && w >= 95) {
+        if (coupledDegree !== undefined) {
+          metricText = `${Math.round(coupledDegree * 100)}% 🔗 · ${loc} LOC`;
+        } else if (n.commitCount && n.commitCount > 0 && w >= 95) {
           metricText = `${loc} LOC · ${n.commitCount} Commits`;
         }
 
@@ -509,7 +578,7 @@ export const TreemapViewer: React.FC<Props> = ({
           .text(displayName);
       }
     });
-  }, [tree, viewMode, sizeMetric, colorMetric, maxItems, isLight, dimensions]);
+  }, [tree, viewMode, sizeMetric, colorMetric, maxItems, isLight, dimensions, selectedNode, selectedCoupledMap]);
 
   return (
     <div

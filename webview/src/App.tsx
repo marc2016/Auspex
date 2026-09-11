@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { getVsCodeApi } from './services/vscode';
 import { TreemapViewer, type TreemapViewMode, type SizeMetric, type ColorMetric } from './components/TreemapViewer';
 import { SystemMapViewer } from './components/SystemMapViewer';
+import { CouplingGraphViewer } from './components/CouplingGraphViewer';
 import { TreemapDetailsPanel } from './components/TreemapDetailsPanel';
+import { CouplingPanel } from './components/CouplingPanel';
 import { TopBar } from './components/TopBar';
 import { WEBVIEW_STRINGS, useLanguage } from './i18n';
 import { Icon } from './components/Icon';
@@ -39,22 +41,41 @@ function filterSourceCodeOnly(node: TreeNode): TreeNode | null {
   return { ...node };
 }
 
+function findFileInTree(root: TreeNode, filePath: string): TreeNode | null {
+  const cleanTarget = filePath.replace(/^\//, '');
+  function search(node: TreeNode): TreeNode | null {
+    if (node.type === 'file' && node.path.replace(/^\//, '') === cleanTarget) {
+      return node;
+    }
+    if (node.children) {
+      for (const child of node.children) {
+        const res = search(child);
+        if (res) return res;
+      }
+    }
+    return null;
+  }
+  return search(root);
+}
+
 export const App: React.FC = () => {
   const vscode = getVsCodeApi();
   const [language, setLanguage] = useLanguage();
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
-  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health'>(() => {
+  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health' | 'coupling'>(() => {
     if (typeof window !== 'undefined') {
       const v = (window as any).__AUSPEX_VIEW__;
       if (v === 'health' || window.location.search.includes('view=health')) return 'health';
       if (v === 'details' || window.location.search.includes('view=details')) return 'details';
+      if (v === 'coupling' || window.location.search.includes('view=coupling')) return 'coupling';
     }
     return 'main';
   });
 
-  const [chartType, setChartType] = useState<'treemap' | 'systemMap'>('treemap');
+  const [chartType, setChartType] = useState<'treemap' | 'systemMap' | 'couplingGraph'>('treemap');
+  const [minCouplingThreshold, setMinCouplingThreshold] = useState<number>(0.2);
   const [viewMode, setViewMode] = useState<TreemapViewMode>('files');
   const [sizeMetric, setSizeMetric] = useState<SizeMetric>('loc');
   const [colorMetric, setColorMetric] = useState<ColorMetric>('health');
@@ -71,7 +92,7 @@ export const App: React.FC = () => {
       if (!msg) return;
 
       if (msg.type === 'init') {
-        if (msg.view === 'details' || msg.view === 'health') {
+        if (msg.view === 'details' || msg.view === 'health' || msg.view === 'coupling') {
           setViewModeType(msg.view);
         }
         if (msg.language && (msg.language === 'de' || msg.language === 'en')) {
@@ -161,6 +182,43 @@ export const App: React.FC = () => {
       setSelectedNode(updated);
     }
   }, [displayTree]);
+
+  if (viewModeType === 'coupling') {
+    return (
+      <div
+        className="app-container"
+        style={{
+          height: '100vh',
+          width: '100%',
+          overflow: 'hidden',
+          backgroundColor: 'var(--bg-secondary)',
+        }}
+      >
+        <CouplingPanel
+          node={selectedNode}
+          snapshot={snapshot}
+          language={language}
+          onOpenFile={handleOpenFile}
+          onSelectNode={(nodePath) => {
+            if (snapshot?.tree) {
+              const found = findFileInTree(snapshot.tree, nodePath);
+              if (found) {
+                setSelectedNode(found);
+                vscode.postMessage({ type: 'nodeSelected', node: found });
+              }
+            }
+          }}
+          onClearSelection={() => {
+            setSelectedNode(null);
+            vscode.postMessage({ type: 'clearSelection' });
+          }}
+          onShowInGraph={() => {
+            vscode.postMessage({ type: 'openTreemap' });
+          }}
+        />
+      </div>
+    );
+  }
 
   if (viewModeType === 'details' || viewModeType === 'health') {
     const t = WEBVIEW_STRINGS[language];
@@ -333,13 +391,33 @@ export const App: React.FC = () => {
         onRescan={handleRescan}
         totalLoc={snapshot?.totalLoc ?? 0}
         totalFiles={snapshot?.totalFiles ?? 0}
+        minCouplingThreshold={minCouplingThreshold}
+        onMinCouplingThresholdChange={setMinCouplingThreshold}
         language={language}
       />
 
       <div className="main-content" style={{ position: 'relative', display: 'flex', flex: 1, overflow: 'hidden' }}>
         <div className="treemap-area" style={{ flex: 1, position: 'relative', height: '100%' }}>
           {displayTree ? (
-            chartType === 'systemMap' ? (
+            chartType === 'couplingGraph' ? (
+              <CouplingGraphViewer
+                tree={displayTree}
+                snapshot={snapshot}
+                selectedNode={selectedNode}
+                minCouplingThreshold={minCouplingThreshold}
+                language={language}
+                onNodeClick={(nodeOrPath) => {
+                  if (typeof nodeOrPath === 'string') {
+                    if (snapshot?.tree) {
+                      const found = findFileInTree(snapshot.tree, nodeOrPath);
+                      if (found) handleNodeClick(found);
+                    }
+                  } else {
+                    handleNodeClick(nodeOrPath);
+                  }
+                }}
+              />
+            ) : chartType === 'systemMap' ? (
               <SystemMapViewer
                 tree={displayTree}
                 selectedNode={selectedNode}
@@ -355,6 +433,7 @@ export const App: React.FC = () => {
                 colorMetric={colorMetric}
                 maxItems={maxItems}
                 onNodeClick={handleNodeClick}
+                selectedNode={selectedNode}
               />
             )
           ) : (

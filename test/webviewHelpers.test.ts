@@ -508,5 +508,160 @@ describe('Webview Helpers', () => {
       expect(baseCommit).toBeNull();
     });
   });
+
+  describe('Temporal Coupling Webview Helpers', () => {
+    function getCouplingClass(degree: number): 'critical' | 'moderate' | 'slight' {
+      if (degree >= 0.7) return 'critical';
+      if (degree >= 0.4) return 'moderate';
+      return 'slight';
+    }
+
+    it('classifies coupling degrees into severity buckets', () => {
+      expect(getCouplingClass(0.85)).toBe('critical');
+      expect(getCouplingClass(0.7)).toBe('critical');
+      expect(getCouplingClass(0.69)).toBe('moderate');
+      expect(getCouplingClass(0.4)).toBe('moderate');
+      expect(getCouplingClass(0.39)).toBe('slight');
+      expect(getCouplingClass(0.2)).toBe('slight');
+    });
+
+    it('filters graph links based on minCouplingThreshold', () => {
+      const pairs = [
+        { fileA: 'a.ts', fileB: 'b.ts', degreeA: 0.85, degreeB: 0.7, coChanges: 10, symmetricDegree: 0.6 },
+        { fileA: 'c.ts', fileB: 'd.ts', degreeA: 0.45, degreeB: 0.3, coChanges: 5, symmetricDegree: 0.25 },
+        { fileA: 'e.ts', fileB: 'f.ts', degreeA: 0.25, degreeB: 0.2, coChanges: 2, symmetricDegree: 0.15 },
+      ];
+
+      function filterPairs(list: typeof pairs, threshold: number) {
+        return list.filter((p) => Math.max(p.degreeA, p.degreeB) >= threshold);
+      }
+
+      expect(filterPairs(pairs, 0.2).length).toBe(3);
+      expect(filterPairs(pairs, 0.4).length).toBe(2);
+      expect(filterPairs(pairs, 0.7).length).toBe(1);
+      expect(filterPairs(pairs, 0.9).length).toBe(0);
+    });
+
+    function getCouplingColor(node: TreeNode, isLight: boolean): string {
+      const maxCoupling =
+        node.temporalCoupling && node.temporalCoupling.length > 0
+          ? Math.max(...node.temporalCoupling.map((c) => c.couplingDegree))
+          : 0;
+
+      if (maxCoupling <= 0) {
+        return isLight ? 'rgba(226, 232, 240, 0.85)' : 'rgba(51, 65, 85, 0.6)';
+      }
+      return getHeatColor(maxCoupling, isLight);
+    }
+
+    it('returns neutral color when node has no temporal coupling', () => {
+      const dummyNode: TreeNode = {
+        name: 'test.ts',
+        path: '/src/test.ts',
+        type: 'file',
+        value: 10,
+        loc: 10,
+        commitCount: 1,
+        churnScore: 0,
+        fixCount: 0,
+        featCount: 0,
+        refactorCount: 0,
+        linesAdded: 0,
+        linesDeleted: 0,
+      };
+
+      const lightColor = getCouplingColor(dummyNode, true);
+      const darkColor = getCouplingColor(dummyNode, false);
+
+      expect(lightColor).toBe('rgba(226, 232, 240, 0.85)');
+      expect(darkColor).toBe('rgba(51, 65, 85, 0.6)');
+    });
+
+    it('returns heat colors based on max coupling degree', () => {
+      const coupledNode: TreeNode = {
+        name: 'service.ts',
+        path: '/src/service.ts',
+        type: 'file',
+        value: 100,
+        loc: 100,
+        commitCount: 10,
+        churnScore: 0.5,
+        fixCount: 1,
+        featCount: 0,
+        refactorCount: 0,
+        linesAdded: 0,
+        linesDeleted: 0,
+        temporalCoupling: [
+          { partnerPath: '/src/repo.ts', partnerName: 'repo.ts', couplingDegree: 0.85, coChanges: 8, symmetricDegree: 0.75 },
+          { partnerPath: '/src/util.ts', partnerName: 'util.ts', couplingDegree: 0.3, coChanges: 3, symmetricDegree: 0.25 },
+        ],
+      };
+
+      const color = getCouplingColor(coupledNode, false);
+      expect(color).toContain('rgba(');
+      // Max coupling is 0.85 which is > 0.5, so red channel should dominate
+      expect(color).toMatch(/^rgba\(23[0-9],/);
+    });
+
+    it('identifies coupled partners and dimming state for Treemap tiles', () => {
+      const selectedNode: TreeNode = {
+        name: 'a.ts',
+        path: '/src/a.ts',
+        type: 'file',
+        value: 50,
+        loc: 50,
+        commitCount: 5,
+        churnScore: 0.2,
+        fixCount: 0,
+        featCount: 0,
+        refactorCount: 0,
+        linesAdded: 0,
+        linesDeleted: 0,
+        temporalCoupling: [
+          { partnerPath: '/src/b.ts', partnerName: 'b.ts', couplingDegree: 0.75, coChanges: 6, symmetricDegree: 0.65 },
+        ],
+      };
+
+      const partnerMap = new Map<string, number>();
+      for (const c of selectedNode.temporalCoupling!) {
+        partnerMap.set(c.partnerPath, c.couplingDegree);
+      }
+
+      function getTileState(path: string) {
+        const isSelected = path === selectedNode.path;
+        const isCoupled = partnerMap.has(path);
+        return {
+          isSelected,
+          isCoupled,
+          coupledDegree: partnerMap.get(path),
+          opacity: isSelected || isCoupled ? 1.0 : 0.35,
+        };
+      }
+
+      // Selected tile
+      expect(getTileState('/src/a.ts')).toEqual({
+        isSelected: true,
+        isCoupled: false,
+        coupledDegree: undefined,
+        opacity: 1.0,
+      });
+
+      // Coupled partner tile
+      expect(getTileState('/src/b.ts')).toEqual({
+        isSelected: false,
+        isCoupled: true,
+        coupledDegree: 0.75,
+        opacity: 1.0,
+      });
+
+      // Unrelated tile (dimmed)
+      expect(getTileState('/src/c.ts')).toEqual({
+        isSelected: false,
+        isCoupled: false,
+        coupledDegree: undefined,
+        opacity: 0.35,
+      });
+    });
+  });
 });
 

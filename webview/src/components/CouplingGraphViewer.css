@@ -1,0 +1,162 @@
+.coupling-graph-viewer {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--vscode-editor-background);
+  user-select: none;
+}
+
+.coupling-graph-svg {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.coupling-graph-svg:active {
+  cursor: grabbing;
+}
+
+/* Links / Edges */
+.coupling-link {
+  stroke-opacity: 0.6;
+  transition: stroke-opacity 0.2s ease, stroke-width 0.2s ease;
+}
+
+.coupling-link.critical {
+  stroke: #ef4444;
+}
+
+.coupling-link.moderate {
+  stroke: #f59e0b;
+}
+
+.coupling-link.slight {
+  stroke: #3b82f6;
+}
+
+.coupling-link.dimmed {
+  stroke-opacity: 0.05;
+}
+
+.coupling-link.highlighted {
+  stroke-opacity: 0.95;
+}
+
+/* Nodes */
+.coupling-node {
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.coupling-node circle {
+  stroke: var(--vscode-editor-background, #1e1e1e);
+  stroke-width: 2px;
+  transition: stroke 0.2s ease, stroke-width 0.2s ease;
+}
+
+.coupling-node:hover circle {
+  stroke: #ffffff;
+  stroke-width: 3px;
+}
+
+.coupling-node.selected circle {
+  stroke: #38bdf8;
+  stroke-width: 4px;
+}
+
+.coupling-node.dimmed {
+  opacity: 0.15;
+}
+
+.coupling-node text {
+  font-family: var(--vscode-font-family, sans-serif);
+  font-size: 10px;
+  fill: var(--vscode-editor-foreground, #cccccc);
+  text-anchor: middle;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: var(--vscode-editor-background, #1e1e1e);
+  stroke-width: 2.5px;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+}
+
+/* Floating Zoom Controls */
+.coupling-zoom-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 20;
+  background: var(--vscode-editorWidget-background, rgba(30, 30, 30, 0.85));
+  border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+}
+
+.coupling-zoom-btn {
+  background: transparent;
+  border: none;
+  color: var(--vscode-editor-foreground, #ccc);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.coupling-zoom-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.15));
+  color: #fff;
+}
+
+/* Graph Info HUD */
+.coupling-graph-hud {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: var(--vscode-editorWidget-background, rgba(30, 30, 30, 0.85));
+  border: 1px solid var(--vscode-widget-border, rgba(255, 255, 255, 0.1));
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(8px);
+  z-index: 20;
+  pointer-events: none;
+}
+
+.coupling-hud-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--vscode-descriptionForeground, #888);
+}
+
+.coupling-hud-value {
+  font-weight: 600;
+  color: var(--vscode-foreground, #fff);
+}
+
+/* Empty State */
+.coupling-graph-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--vscode-descriptionForeground, #888);
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+}

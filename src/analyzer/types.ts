@@ -93,6 +93,44 @@ export interface FileCommitStat {
   lastModifiedAt: number;
   contributors?: ContributorStat[];
   commits?: CommitInfo[];
+  temporalCoupling?: TemporalCoupling[];
+}
+
+export interface TemporalCoupling {
+  filePath: string;
+  coChanges: number;
+  couplingDegree: number; // 0.0 to 1.0 (e.g. 0.85 = 85%)
+  totalCommits: number;
+}
+
+export interface ProjectCouplingPair {
+  fileA: string;
+  fileB: string;
+  coChanges: number;
+  degreeA: number;
+  degreeB: number;
+  symmetricDegree: number;
+}
+
+export interface CouplingGraphNode {
+  id: string;
+  name: string;
+  loc: number;
+  commitCount: number;
+  codeHealth?: number;
+  churnScore?: number;
+}
+
+export interface CouplingGraphLink {
+  source: string;
+  target: string;
+  coChanges: number;
+  degree: number;
+}
+
+export interface CouplingGraphData {
+  nodes: CouplingGraphNode[];
+  links: CouplingGraphLink[];
 }
 
 export interface TreeNode {
@@ -117,6 +155,7 @@ export interface TreeNode {
   commits?: CommitInfo[];
   codeHealth?: number; // 1.0 to 10.0 (CodeScene scale)
   biomarkers?: BiomarkerFinding[];
+  temporalCoupling?: TemporalCoupling[];
 }
 
 export interface HotspotItem {
@@ -140,6 +179,8 @@ export interface AnalysisSnapshot {
   scannedAt: string;
   tree: TreeNode;
   hotspots: HotspotItem[];
+  projectCouplings?: ProjectCouplingPair[];
+  couplingGraph?: CouplingGraphData;
 }
 
 export interface PipelineProgress {
