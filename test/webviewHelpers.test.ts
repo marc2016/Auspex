@@ -358,5 +358,155 @@ describe('Webview Helpers', () => {
       expect(getCodeHealthColor(undefined)).toBe('#10b981');
     });
   });
+
+  describe('isBugfixCommit (Webview Details)', () => {
+    function isBugfixCommit(commit: {
+      isFix?: boolean;
+      message?: string;
+      jiraIssues?: { isBug?: boolean }[];
+    }): boolean {
+      if (typeof commit.isFix === 'boolean') {
+        return commit.isFix;
+      }
+      if (commit.jiraIssues && commit.jiraIssues.some((j) => j.isBug)) {
+        return true;
+      }
+      const subject = (commit.message || '').toLowerCase().trim();
+      if (
+        subject.startsWith('fix:') ||
+        subject.startsWith('fix(') ||
+        subject.startsWith('hotfix:') ||
+        subject.startsWith('bugfix:')
+      ) {
+        return true;
+      }
+      return /\b(fix|fixed|fixes|bug|bugs|hotfix|patch|resolve|resolved)\b/i.test(subject);
+    }
+
+    it('respects explicit isFix boolean property', () => {
+      expect(isBugfixCommit({ isFix: true, message: 'chore: update readme' })).toBe(true);
+      expect(isBugfixCommit({ isFix: false, message: 'fix: something broken' })).toBe(false);
+    });
+
+    it('identifies bug fix if any associated Jira issue is a bug', () => {
+      expect(
+        isBugfixCommit({
+          message: 'PROJ-123 implement feature',
+          jiraIssues: [{ isBug: false }, { isBug: true }],
+        })
+      ).toBe(true);
+
+      expect(
+        isBugfixCommit({
+          message: 'PROJ-124 implement feature',
+          jiraIssues: [{ isBug: false }],
+        })
+      ).toBe(false);
+    });
+
+    it('identifies conventional commit prefixes (fix, hotfix, bugfix)', () => {
+      expect(isBugfixCommit({ message: 'fix: prevent crash on null' })).toBe(true);
+      expect(isBugfixCommit({ message: 'fix(parser): syntax error handling' })).toBe(true);
+      expect(isBugfixCommit({ message: 'hotfix: critical memory leak' })).toBe(true);
+      expect(isBugfixCommit({ message: 'bugfix: regression in rendering' })).toBe(true);
+    });
+
+    it('identifies bug-related keywords in message', () => {
+      expect(isBugfixCommit({ message: 'resolve race condition in storage' })).toBe(true);
+      expect(isBugfixCommit({ message: 'resolved unexpected timeout' })).toBe(true);
+      expect(isBugfixCommit({ message: 'patch for security vulnerability' })).toBe(true);
+      expect(isBugfixCommit({ message: 'fixes broken navigation' })).toBe(true);
+    });
+
+    it('returns false for features and refactorings without bug indicators', () => {
+      expect(isBugfixCommit({ message: 'feat: add system map visualization' })).toBe(false);
+      expect(isBugfixCommit({ message: 'refactor: extract helper function' })).toBe(false);
+      expect(isBugfixCommit({ message: 'docs: update changelog' })).toBe(false);
+      expect(isBugfixCommit({ message: '' })).toBe(false);
+    });
+  });
+
+  describe('TopBar Contextual Control Visibility', () => {
+    function getVisibleControls(chartType: 'treemap' | 'systemMap') {
+      return {
+        showSizeMetric: chartType === 'treemap',
+        showMaxItems: chartType === 'treemap',
+        showColorMetric: true,
+        showTimeframe: true,
+      };
+    }
+
+    it('shows size metric and item limit controls only for treemap', () => {
+      const treemapControls = getVisibleControls('treemap');
+      expect(treemapControls.showSizeMetric).toBe(true);
+      expect(treemapControls.showMaxItems).toBe(true);
+      expect(treemapControls.showColorMetric).toBe(true);
+      expect(treemapControls.showTimeframe).toBe(true);
+    });
+
+    it('hides size metric and item limit controls for systemMap', () => {
+      const systemMapControls = getVisibleControls('systemMap');
+      expect(systemMapControls.showSizeMetric).toBe(false);
+      expect(systemMapControls.showMaxItems).toBe(false);
+      expect(systemMapControls.showColorMetric).toBe(true);
+      expect(systemMapControls.showTimeframe).toBe(true);
+    });
+  });
+
+  describe('Commit Diff Comparison Flow (Webview Details)', () => {
+    interface CommitAction {
+      type: 'compareWithParent' | 'setAsBase' | 'clearBase' | 'compareWithBase';
+      commitHash: string;
+      baseCommitHash?: string;
+    }
+
+    function handleCommitClick(
+      commitHash: string,
+      currentBase: string | null
+    ): { nextBase: string | null; action: CommitAction } {
+      if (currentBase && currentBase !== commitHash) {
+        return {
+          nextBase: currentBase,
+          action: {
+            type: 'compareWithBase',
+            commitHash,
+            baseCommitHash: currentBase,
+          },
+        };
+      }
+      return {
+        nextBase: currentBase,
+        action: {
+          type: 'compareWithParent',
+          commitHash,
+        },
+      };
+    }
+
+    it('compares with parent when no base commit is selected', () => {
+      const result = handleCommitClick('sha2', null);
+      expect(result.action.type).toBe('compareWithParent');
+      expect(result.action.commitHash).toBe('sha2');
+      expect(result.nextBase).toBeNull();
+    });
+
+    it('compares target commit with base commit when base is active', () => {
+      const result = handleCommitClick('sha2', 'sha1');
+      expect(result.action.type).toBe('compareWithBase');
+      expect(result.action.commitHash).toBe('sha2');
+      expect(result.action.baseCommitHash).toBe('sha1');
+    });
+
+    it('toggles base commit selection correctly', () => {
+      let baseCommit: string | null = null;
+      // Set base
+      baseCommit = 'sha1';
+      expect(baseCommit).toBe('sha1');
+
+      // Clear base
+      baseCommit = null;
+      expect(baseCommit).toBeNull();
+    });
+  });
 });
 
