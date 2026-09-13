@@ -25,6 +25,40 @@ export function getTimeframeCutoff(option: TimeframeOption, now = Date.now()): n
   }
 }
 
+function computeTimeframeKnowledge(
+  contributors: ContributorStat[],
+  commitCount: number,
+  loc: number,
+  fallbackNode: TreeNode
+) {
+  if (contributors.length > 0) {
+    const primary = contributors[0];
+    const percentage = primary.percentage ?? 100;
+    let knowledgeRisk: 'high' | 'medium' | 'low' = 'low';
+    if (percentage >= 75 && commitCount >= 2) {
+      if (loc >= 150 || contributors.length === 1) {
+        knowledgeRisk = 'high';
+      } else {
+        knowledgeRisk = 'medium';
+      }
+    } else if (percentage >= 50 || contributors.length <= 2) {
+      knowledgeRisk = 'medium';
+    } else {
+      knowledgeRisk = 'low';
+    }
+    return {
+      primaryAuthor: primary.name,
+      primaryAuthorPercentage: percentage,
+      knowledgeRisk,
+    };
+  }
+  return {
+    primaryAuthor: fallbackNode.primaryAuthor,
+    primaryAuthorPercentage: fallbackNode.primaryAuthorPercentage,
+    knowledgeRisk: fallbackNode.knowledgeRisk,
+  };
+}
+
 /**
  * Recursively filters a TreeNode hierarchy by timeframe, recalculating
  * commitCount, fixCount, linesAdded, linesDeleted, defectRatio, lastModifiedAt,
@@ -96,6 +130,8 @@ export function filterTreeByTimeframe(
           }))
           .sort((a, b) => b.commits - a.commits);
 
+        const knowledge = computeTimeframeKnowledge(contributors, totalCommits, node.loc, node);
+
         return {
           ...node,
           commitCount: totalCommits,
@@ -109,6 +145,9 @@ export function filterTreeByTimeframe(
           contributors,
           commits: mergedCommits,
           children: filteredChildren,
+          primaryAuthor: knowledge.primaryAuthor,
+          primaryAuthorPercentage: knowledge.primaryAuthorPercentage,
+          knowledgeRisk: knowledge.knowledgeRisk,
         };
       }
 
@@ -139,6 +178,8 @@ export function filterTreeByTimeframe(
         }))
         .sort((a, b) => b.commits - a.commits);
 
+      const knowledge = computeTimeframeKnowledge(contributors, commitCount, node.loc, node);
+
       return {
         ...node,
         commitCount,
@@ -150,6 +191,9 @@ export function filterTreeByTimeframe(
         contributors,
         commits: filteredCommits,
         children: filteredChildren,
+        primaryAuthor: knowledge.primaryAuthor,
+        primaryAuthorPercentage: knowledge.primaryAuthorPercentage,
+        knowledgeRisk: knowledge.knowledgeRisk,
       };
     }
 
@@ -180,6 +224,8 @@ export function filterTreeByTimeframe(
       }))
       .sort((a, b) => b.commits - a.commits);
 
+    const knowledge = computeTimeframeKnowledge(contributors, commitCount, node.loc, node);
+
     return {
       ...node,
       commitCount,
@@ -190,6 +236,9 @@ export function filterTreeByTimeframe(
       lastModifiedAt,
       contributors,
       commits: filteredCommits,
+      primaryAuthor: knowledge.primaryAuthor,
+      primaryAuthorPercentage: knowledge.primaryAuthorPercentage,
+      knowledgeRisk: knowledge.knowledgeRisk,
     };
   }
 

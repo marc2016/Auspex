@@ -187,11 +187,12 @@ export class AuspexPipeline {
       percentage: 75,
     });
 
-    const { tree, hotspots, projectCouplings, couplingGraph } = this.treeAggregator.buildTree(
-      parsedFiles,
-      commitStats,
-      this.churnAnalyzer.lastProjectCouplings
-    );
+    const { tree, hotspots, projectCouplings, couplingGraph, knowledgeSummary } =
+      this.treeAggregator.buildTree(
+        parsedFiles,
+        commitStats,
+        this.churnAnalyzer.lastProjectCouplings
+      );
 
     const totalLoc = parsedFiles.reduce((sum, f) => sum + f.loc, 0);
     const durationMs = Date.now() - startTime;
@@ -208,6 +209,7 @@ export class AuspexPipeline {
       hotspots,
       projectCouplings,
       couplingGraph,
+      knowledgeSummary,
     };
 
     if (storage) {

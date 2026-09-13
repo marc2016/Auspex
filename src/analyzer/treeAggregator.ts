@@ -10,9 +10,13 @@ import type {
   CouplingGraphData,
   CouplingGraphNode,
   CouplingGraphLink,
+  KnowledgeSummary,
 } from './types';
+import { KnowledgeAnalyzer } from './knowledgeAnalyzer';
 
 export class TreeAggregator {
+  private knowledgeAnalyzer = new KnowledgeAnalyzer();
+
   buildTree(
     files: ParsedFileInfo[],
     commitStats: Map<string, FileCommitStat>,
@@ -22,6 +26,7 @@ export class TreeAggregator {
     hotspots: HotspotItem[];
     projectCouplings?: ProjectCouplingPair[];
     couplingGraph?: CouplingGraphData;
+    knowledgeSummary?: KnowledgeSummary;
   } {
     const root: TreeNode = {
       name: 'root',
@@ -142,6 +147,14 @@ export class TreeAggregator {
       const fileContributors = fileStats?.contributors ?? [];
       const fileCommits = fileStats?.commits ?? [];
 
+      const fileChurnScore = maxCommits > 0 ? commitCount / maxCommits : 0;
+      const fileKnowledge = this.knowledgeAnalyzer.assessNodeKnowledge(
+        fileContributors,
+        commitCount,
+        file.loc,
+        fileChurnScore
+      );
+
       // Build classes and methods under the file
       const fileChildren: TreeNode[] = [];
       const classMap = new Map<string, TreeNode>();
@@ -167,6 +180,9 @@ export class TreeAggregator {
             endLine: cls.endLine,
             contributors: fileContributors,
             commits: fileCommits,
+            primaryAuthor: fileKnowledge.primaryAuthor,
+            primaryAuthorPercentage: fileKnowledge.primaryAuthorPercentage,
+            knowledgeRisk: fileKnowledge.knowledgeRisk,
             codeHealth: cls.codeHealth ?? file.codeHealth ?? 10.0,
             biomarkers: cls.biomarkers || [],
             children: [],
@@ -196,6 +212,9 @@ export class TreeAggregator {
           endLine: m.endLine,
           contributors: fileContributors,
           commits: fileCommits,
+          primaryAuthor: fileKnowledge.primaryAuthor,
+          primaryAuthorPercentage: fileKnowledge.primaryAuthorPercentage,
+          knowledgeRisk: fileKnowledge.knowledgeRisk,
           codeHealth: m.codeHealth ?? file.codeHealth ?? 10.0,
           biomarkers: m.biomarkers || [],
         };
@@ -231,6 +250,9 @@ export class TreeAggregator {
         contributors: fileContributors,
         commits: fileCommits,
         temporalCoupling: fileStats?.temporalCoupling,
+        primaryAuthor: fileKnowledge.primaryAuthor,
+        primaryAuthorPercentage: fileKnowledge.primaryAuthorPercentage,
+        knowledgeRisk: fileKnowledge.knowledgeRisk,
         codeHealth: file.codeHealth ?? 10.0,
         biomarkers: file.biomarkers || [],
         children: fileChildren.length > 0 ? fileChildren : undefined,
@@ -283,7 +305,13 @@ export class TreeAggregator {
       couplingGraph = { nodes, links };
     }
 
-    return { tree: root, hotspots, projectCouplings, couplingGraph };
+    const knowledgeSummary = this.knowledgeAnalyzer.computeProjectSummary(
+      files,
+      commitStats,
+      maxCommits
+    );
+
+    return { tree: root, hotspots, projectCouplings, couplingGraph, knowledgeSummary };
   }
 
   private aggregateLoc(node: TreeNode): number {
@@ -398,6 +426,16 @@ export class TreeAggregator {
           b.commits - a.commits || b.linesAdded + b.linesDeleted - (a.linesAdded + a.linesDeleted)
       );
       node.contributors = contributors;
+
+      const folderKnowledge = this.knowledgeAnalyzer.assessNodeKnowledge(
+        contributors,
+        totalCommits,
+        totalLoc,
+        0
+      );
+      node.primaryAuthor = folderKnowledge.primaryAuthor;
+      node.primaryAuthorPercentage = folderKnowledge.primaryAuthorPercentage;
+      node.knowledgeRisk = folderKnowledge.knowledgeRisk;
 
       // Populate aggregated commits for folder/namespace (capped at 100 to keep snapshot serialization fast)
       const commits = Array.from(commitMap.values());

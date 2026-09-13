@@ -164,6 +164,7 @@ export const TopBar: React.FC<Props> = ({
             <option value="recency">{t.colorOptions.recency}</option>
             <option value="health">{t.colorOptions.health}</option>
             <option value="coupling">{t.colorOptions.coupling}</option>
+            <option value="knowledge">{t.colorOptions.knowledge}</option>
           </select>
         </div>
 

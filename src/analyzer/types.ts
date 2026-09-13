@@ -156,6 +156,41 @@ export interface TreeNode {
   codeHealth?: number; // 1.0 to 10.0 (CodeScene scale)
   biomarkers?: BiomarkerFinding[];
   temporalCoupling?: TemporalCoupling[];
+  primaryAuthor?: string;
+  primaryAuthorPercentage?: number;
+  knowledgeRisk?: KnowledgeRiskLevel;
+}
+
+export type KnowledgeRiskLevel = 'low' | 'medium' | 'high';
+
+export interface KnowledgeAuthorStat {
+  name: string;
+  fileCount: number;
+  linesAdded: number;
+  linesDeleted: number;
+  totalCommits: number;
+  monopolyFileCount: number;
+  percentageOfCodebase: number;
+}
+
+export interface KnowledgeRiskItem {
+  filePath: string;
+  name: string;
+  loc: number;
+  commitCount: number;
+  primaryAuthor: string;
+  ownershipPercentage: number;
+  churnScore: number;
+  riskLevel: KnowledgeRiskLevel;
+}
+
+export interface KnowledgeSummary {
+  totalAuthors: number;
+  truckFactor: number; // Minimal number of developers owning > 50% of the codebase
+  monopolyFileCount: number;
+  monopolyPercentage: number;
+  topAuthors: KnowledgeAuthorStat[];
+  highestRiskFiles: KnowledgeRiskItem[];
 }
 
 export interface HotspotItem {
@@ -181,6 +216,7 @@ export interface AnalysisSnapshot {
   hotspots: HotspotItem[];
   projectCouplings?: ProjectCouplingPair[];
   couplingGraph?: CouplingGraphData;
+  knowledgeSummary?: KnowledgeSummary;
 }
 
 export interface PipelineProgress {

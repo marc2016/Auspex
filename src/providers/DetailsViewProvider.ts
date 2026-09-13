@@ -4,7 +4,7 @@ import fs from 'fs';
 import type { TreeNode } from '../analyzer/types';
 import { openFileInEditor } from '../utils/navigation';
 import { openCommitDiffInEditor } from '../utils/gitDiff';
-import { resolveLanguage } from '../i18n';
+import { resolveLanguage, EXT_STRINGS } from '../i18n';
 
 export class AuspexDetailsViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'auspex.detailsView';
@@ -125,11 +125,15 @@ export class AuspexDetailsViewProvider implements vscode.WebviewViewProvider {
       return html;
     }
 
+    const lang = resolveLanguage();
+    const t = EXT_STRINGS[lang];
+    const title = t.viewTitles.details;
+
     return `<!DOCTYPE html>
-      <html lang="en">
+      <html lang="${lang}">
       <head>
         <meta charset="UTF-8">
-        <title>Auspex Details</title>
+        <title>${title}</title>
         <style>
           body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: var(--vscode-editor-background); color: var(--vscode-editor-foreground); padding: 16px; box-sizing: border-box; }
           .card { text-align: center; max-width: 320px; }
@@ -137,8 +141,8 @@ export class AuspexDetailsViewProvider implements vscode.WebviewViewProvider {
       </head>
       <body>
         <div class="card">
-          <h3>Auspex Details</h3>
-          <p>Webview assets are being built. Please run <code>npm run build</code>.</p>
+          <h3>${title}</h3>
+          <p>${t.fallbackBuildNotice}</p>
         </div>
       </body>
       </html>`;

@@ -434,16 +434,16 @@ export const CouplingGraphViewer: React.FC<Props> = ({
 
           {/* Floating Zoom Controls */}
           <div className="coupling-zoom-controls">
-            <button className="coupling-zoom-btn" onClick={handleZoomIn} title="Zoom in">
+            <button className="coupling-zoom-btn" onClick={handleZoomIn} title={t.zoom.in}>
               <Icon path={mdiPlus} size={0.75} />
             </button>
-            <button className="coupling-zoom-btn" onClick={handleZoomOut} title="Zoom out">
+            <button className="coupling-zoom-btn" onClick={handleZoomOut} title={t.zoom.out}>
               <Icon path={mdiMinus} size={0.75} />
             </button>
             <button className="coupling-zoom-btn" onClick={handleFitView} title={cStrings.fitView}>
               <Icon path={mdiCrosshairsGps} size={0.75} />
             </button>
-            <button className="coupling-zoom-btn" onClick={handleResetZoom} title="Reset view">
+            <button className="coupling-zoom-btn" onClick={handleResetZoom} title={t.zoom.reset}>
               <Icon path={mdiRefresh} size={0.75} />
             </button>
           </div>

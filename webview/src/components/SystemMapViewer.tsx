@@ -10,6 +10,7 @@ import {
   getGrowthColor,
   getRecencyColor,
   getCouplingColor,
+  getKnowledgeColor,
   renderTooltipHtml,
 } from './TreemapViewer';
 
@@ -81,6 +82,8 @@ export const SystemMapViewer: React.FC<Props> = ({
       return getGrowthColor(node.linesAdded || 0, maxAdded, isLight);
     } else if (colorMetric === 'recency') {
       return getRecencyColor(node.lastModifiedAt, isLight);
+    } else if (colorMetric === 'knowledge') {
+      return getKnowledgeColor(node, isLight);
     }
     return getCodeHealthColor(node.codeHealth);
   };
@@ -172,7 +175,7 @@ export const SystemMapViewer: React.FC<Props> = ({
           .style('filter', 'brightness(1.18)');
         setHoveredNode(d.data);
         if (tooltipRef.current) {
-          tooltipRef.current.innerHTML = renderTooltipHtml(d.data, isLight);
+          tooltipRef.current.innerHTML = renderTooltipHtml(d.data, isLight, language);
           tooltipRef.current.style.display = 'block';
           updateTooltipPosition(event);
         }
@@ -349,29 +352,43 @@ export const SystemMapViewer: React.FC<Props> = ({
           </>
         ) : colorMetric === 'churn' ? (
           <>
-            <span style={{ fontSize: 10.5 }}>Churn / Hotspots:</span>
-            <span style={{ color: '#10b981' }}>● Gering</span>
-            <span style={{ color: '#f59e0b' }}>● Mittel</span>
-            <span style={{ color: '#ef4444' }}>● Hoch</span>
+            <span style={{ fontSize: 10.5 }}>{t.legend.churn}</span>
+            <span style={{ color: '#10b981' }}>● {t.legend.churnLow}</span>
+            <span style={{ color: '#f59e0b' }}>● {t.legend.churnMed}</span>
+            <span style={{ color: '#ef4444' }}>● {t.legend.churnHigh}</span>
           </>
         ) : colorMetric === 'fixes' ? (
           <>
-            <span style={{ fontSize: 10.5 }}>Bugfixes:</span>
-            <span style={{ color: '#10b981' }}>● Keine Fixes</span>
-            <span style={{ color: '#f59e0b' }}>● Einige Fixes</span>
-            <span style={{ color: '#ef4444' }}>● Viele Fixes</span>
+            <span style={{ fontSize: 10.5 }}>{t.legend.fixes}</span>
+            <span style={{ color: '#10b981' }}>● {t.legend.fixesNone}</span>
+            <span style={{ color: '#f59e0b' }}>● {t.legend.fixesSome}</span>
+            <span style={{ color: '#ef4444' }}>● {t.legend.fixesMany}</span>
           </>
         ) : colorMetric === 'growth' ? (
           <>
-            <span style={{ fontSize: 10.5 }}>Code-Wachstum (+LOC):</span>
-            <span style={{ color: '#60a5fa' }}>● Wenig</span>
-            <span style={{ color: '#10b981' }}>● Stark</span>
+            <span style={{ fontSize: 10.5 }}>{t.legend.growth}</span>
+            <span style={{ color: '#60a5fa' }}>● {t.legend.growthLow}</span>
+            <span style={{ color: '#10b981' }}>● {t.legend.growthHigh}</span>
+          </>
+        ) : colorMetric === 'coupling' ? (
+          <>
+            <span style={{ fontSize: 10.5 }}>{t.legend.coupling}</span>
+            <span style={{ color: 'var(--accent-color)' }}>● {t.coupling.slightCoupling}</span>
+            <span style={{ color: '#f59e0b' }}>● {t.coupling.moderateCoupling}</span>
+            <span style={{ color: '#ef4444' }}>● {t.coupling.criticalCoupling}</span>
+          </>
+        ) : colorMetric === 'knowledge' ? (
+          <>
+            <span style={{ fontSize: 10.5 }}>{t.legend.knowledge}</span>
+            <span style={{ color: '#10b981' }}>● {t.knowledge.lowRisk}</span>
+            <span style={{ color: '#f59e0b' }}>● {t.knowledge.mediumRisk}</span>
+            <span style={{ color: '#ef4444' }}>● {t.knowledge.highRisk}</span>
           </>
         ) : (
           <>
-            <span style={{ fontSize: 10.5 }}>Aktualität:</span>
-            <span style={{ color: '#3b82f6' }}>● Frisch</span>
-            <span style={{ opacity: 0.6 }}>● Älter</span>
+            <span style={{ fontSize: 10.5 }}>{t.legend.recency}</span>
+            <span style={{ color: '#3b82f6' }}>● {t.legend.fresh}</span>
+            <span style={{ opacity: 0.6 }}>● {t.legend.older}</span>
           </>
         )}
       </div>
@@ -394,7 +411,7 @@ export const SystemMapViewer: React.FC<Props> = ({
       >
         <button
           onClick={handleZoomIn}
-          title="Zoom in (Mausrad vor)"
+          title={t.zoom.in}
           style={{
             background: 'none',
             border: 'none',
@@ -411,7 +428,7 @@ export const SystemMapViewer: React.FC<Props> = ({
         </button>
         <button
           onClick={handleZoomOut}
-          title="Zoom out (Mausrad zurück)"
+          title={t.zoom.out}
           style={{
             background: 'none',
             border: 'none',
@@ -428,7 +445,7 @@ export const SystemMapViewer: React.FC<Props> = ({
         </button>
         <button
           onClick={handleResetZoom}
-          title="Zoom zurücksetzen"
+          title={t.zoom.reset}
           style={{
             background: 'none',
             border: 'none',

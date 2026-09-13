@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import path from 'path';
+import { resolveLanguage, EXT_STRINGS } from '../i18n';
 
 export async function openFileInEditor(
   workspacePath: string,
@@ -29,7 +30,8 @@ export async function openFileInEditor(
       preserveFocus: false,
     });
   } catch (err) {
-    vscode.window.showErrorMessage(`[Auspex] Could not open file: ${relativeOrAbsolutePath}`);
+    const t = EXT_STRINGS[resolveLanguage()];
+    vscode.window.showErrorMessage(t.fileOpenError(relativeOrAbsolutePath));
     console.error('[Auspex] Navigation error:', err);
   }
 }

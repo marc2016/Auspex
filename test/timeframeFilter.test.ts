@@ -223,5 +223,42 @@ describe('timeframeFilter', () => {
       expect(isNaN(res.defectRatio || 0)).toBe(false);
       expect(isNaN(res.churnScore)).toBe(false);
     });
+
+    it('recalculates and preserves primaryAuthor and knowledgeRisk in filtered timeframe', () => {
+      const tree: TreeNode = {
+        name: 'module.ts',
+        path: 'module.ts',
+        type: 'file',
+        value: 200,
+        loc: 200,
+        commitCount: 3,
+        primaryAuthor: 'Original Dev',
+        primaryAuthorPercentage: 100,
+        knowledgeRisk: 'high',
+        commits: [
+          {
+            hash: 'c1',
+            author: 'New Dev',
+            timestamp: fixedNow - 1000,
+            message: 'feature update',
+            linesAdded: 50,
+            linesDeleted: 10,
+          },
+          {
+            hash: 'c2',
+            author: 'New Dev',
+            timestamp: fixedNow - 2000,
+            message: 'bug fix',
+            linesAdded: 20,
+            linesDeleted: 5,
+          },
+        ],
+      };
+
+      const filtered = filterTreeByTimeframe(tree, '1w', fixedNow);
+      expect(filtered.primaryAuthor).toBe('New Dev');
+      expect(filtered.primaryAuthorPercentage).toBe(100);
+      expect(filtered.knowledgeRisk).toBe('high');
+    });
   });
 });

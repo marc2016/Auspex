@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import path from 'path';
 import { simpleGit } from 'simple-git';
+import { resolveLanguage, EXT_STRINGS } from '../i18n';
 
 export const AUSPEX_GIT_SCHEME = 'auspex-git';
 
@@ -61,9 +62,8 @@ export async function openCommitDiffInEditor(
     }
 
     if (!targetFile) {
-      vscode.window.showInformationMessage(
-        `[Auspex] No changed files found to compare.`
-      );
+      const t = EXT_STRINGS[resolveLanguage()];
+      vscode.window.showInformationMessage(t.noChangedFilesFound);
       return;
     }
 
@@ -107,8 +107,9 @@ export async function openCommitDiffInEditor(
       preserveFocus: false,
     });
   } catch (err) {
+    const t = EXT_STRINGS[resolveLanguage()];
     vscode.window.showErrorMessage(
-      `[Auspex] Failed to open commit diff: ${err instanceof Error ? err.message : String(err)}`
+      t.diffOpenError(err instanceof Error ? err.message : String(err))
     );
     console.error('[Auspex] Diff error:', err);
   }

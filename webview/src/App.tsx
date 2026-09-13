@@ -5,6 +5,7 @@ import { SystemMapViewer } from './components/SystemMapViewer';
 import { CouplingGraphViewer } from './components/CouplingGraphViewer';
 import { TreemapDetailsPanel } from './components/TreemapDetailsPanel';
 import { CouplingPanel } from './components/CouplingPanel';
+import { KnowledgePanel } from './components/KnowledgePanel';
 import { TopBar } from './components/TopBar';
 import { WEBVIEW_STRINGS, useLanguage } from './i18n';
 import { Icon } from './components/Icon';
@@ -64,12 +65,13 @@ export const App: React.FC = () => {
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
-  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health' | 'coupling'>(() => {
+  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health' | 'coupling' | 'knowledge'>(() => {
     if (typeof window !== 'undefined') {
       const v = (window as any).__AUSPEX_VIEW__;
       if (v === 'health' || window.location.search.includes('view=health')) return 'health';
       if (v === 'details' || window.location.search.includes('view=details')) return 'details';
       if (v === 'coupling' || window.location.search.includes('view=coupling')) return 'coupling';
+      if (v === 'knowledge' || window.location.search.includes('view=knowledge')) return 'knowledge';
     }
     return 'main';
   });
@@ -92,7 +94,7 @@ export const App: React.FC = () => {
       if (!msg) return;
 
       if (msg.type === 'init') {
-        if (msg.view === 'details' || msg.view === 'health' || msg.view === 'coupling') {
+        if (msg.view === 'details' || msg.view === 'health' || msg.view === 'coupling' || msg.view === 'knowledge') {
           setViewModeType(msg.view);
         }
         if (msg.language && (msg.language === 'de' || msg.language === 'en')) {
@@ -213,6 +215,43 @@ export const App: React.FC = () => {
             vscode.postMessage({ type: 'clearSelection' });
           }}
           onShowInGraph={() => {
+            vscode.postMessage({ type: 'openTreemap' });
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (viewModeType === 'knowledge') {
+    return (
+      <div
+        className="app-container"
+        style={{
+          height: '100vh',
+          width: '100%',
+          overflow: 'hidden',
+          backgroundColor: 'var(--bg-secondary)',
+        }}
+      >
+        <KnowledgePanel
+          node={selectedNode}
+          snapshot={snapshot}
+          language={language}
+          onOpenFile={handleOpenFile}
+          onSelectNode={(nodePath) => {
+            if (snapshot?.tree) {
+              const found = findFileInTree(snapshot.tree, nodePath);
+              if (found) {
+                setSelectedNode(found);
+                vscode.postMessage({ type: 'nodeSelected', node: found });
+              }
+            }
+          }}
+          onClearSelection={() => {
+            setSelectedNode(null);
+            vscode.postMessage({ type: 'clearSelection' });
+          }}
+          onShowInTreemap={() => {
             vscode.postMessage({ type: 'openTreemap' });
           }}
         />
@@ -434,6 +473,7 @@ export const App: React.FC = () => {
                 maxItems={maxItems}
                 onNodeClick={handleNodeClick}
                 selectedNode={selectedNode}
+                language={language}
               />
             )
           ) : (

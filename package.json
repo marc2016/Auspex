@@ -33,42 +33,42 @@
     "commands": [
       {
         "command": "auspex.openTreemap",
-        "title": "Auspex: Open Hotspot Treemap",
+        "title": "%command.openTreemap%",
         "icon": "$(graph)"
       },
       {
         "command": "auspex.rescan",
-        "title": "Auspex: Rescan Workspace",
+        "title": "%command.rescan%",
         "icon": "$(refresh)"
       },
       {
         "command": "auspex.openHelp",
-        "title": "Auspex: Open Guide & Documentation",
+        "title": "%command.openHelp%",
         "icon": "$(question)"
       },
       {
         "command": "auspex.focusDetailsView",
-        "title": "Auspex: Focus Details View",
+        "title": "%command.focusDetailsView%",
         "icon": "$(info)"
       },
       {
         "command": "auspex.setJiraToken",
-        "title": "Auspex: Set Jira API Token",
+        "title": "%command.setJiraToken%",
         "icon": "$(key)"
       },
       {
         "command": "auspex.clearJiraToken",
-        "title": "Auspex: Clear Jira API Token",
+        "title": "%command.clearJiraToken%",
         "icon": "$(clear-all)"
       },
       {
         "command": "auspex.testJiraConnection",
-        "title": "Auspex: Test Jira Connection",
+        "title": "%command.testJiraConnection%",
         "icon": "$(plug)"
       },
       {
         "command": "auspex.openSelectedFile",
-        "title": "Auspex: Open File in Editor",
+        "title": "%command.openSelectedFile%",
         "icon": "$(go-to-file)"
       }
     ],
@@ -91,7 +91,7 @@
         },
         {
           "command": "auspex.openSelectedFile",
-          "when": "view == auspex.detailsView || view == auspex.healthView || view == auspex.couplingView || (view == auspex.sidebarView && auspex.hasSelectedFile)",
+          "when": "view == auspex.detailsView || view == auspex.healthView || view == auspex.couplingView || view == auspex.knowledgeView || (view == auspex.sidebarView && auspex.hasSelectedFile)",
           "group": "navigation@1"
         }
       ]
@@ -100,7 +100,7 @@
       "activitybar": [
         {
           "id": "auspex-sidebar",
-          "title": "Auspex",
+          "title": "%viewsContainers.activitybar.title%",
           "icon": "assets/auspex-icon.svg"
         }
       ]
@@ -110,27 +110,32 @@
         {
           "type": "webview",
           "id": "auspex.overviewView",
-          "name": "Auspex"
+          "name": "%views.overviewView%"
         },
         {
           "type": "webview",
           "id": "auspex.sidebarView",
-          "name": "Auspex Hotspots"
+          "name": "%views.sidebarView%"
         },
         {
           "type": "webview",
           "id": "auspex.detailsView",
-          "name": "Auspex Details"
+          "name": "%views.detailsView%"
         },
         {
           "type": "webview",
           "id": "auspex.healthView",
-          "name": "Auspex Health"
+          "name": "%views.healthView%"
         },
         {
           "type": "webview",
           "id": "auspex.couplingView",
-          "name": "Auspex Kopplung"
+          "name": "%views.couplingView%"
+        },
+        {
+          "type": "webview",
+          "id": "auspex.knowledgeView",
+          "name": "%views.knowledgeView%"
         }
       ]
     },

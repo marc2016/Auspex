@@ -1,0 +1,17 @@
+{
+  "command.openTreemap": "Auspex: Hotspot-Treemap öffnen",
+  "command.rescan": "Auspex: Workspace neu scannen",
+  "command.openHelp": "Auspex: Hilfe & Dokumentation öffnen",
+  "command.focusDetailsView": "Auspex: Details-Ansicht fokussieren",
+  "command.setJiraToken": "Auspex: Jira API-Token festlegen",
+  "command.clearJiraToken": "Auspex: Jira API-Token löschen",
+  "command.testJiraConnection": "Auspex: Jira-Verbindung testen",
+  "command.openSelectedFile": "Auspex: Datei im Editor öffnen",
+  "viewsContainers.activitybar.title": "Auspex",
+  "views.overviewView": "Auspex",
+  "views.sidebarView": "Auspex Hotspots",
+  "views.detailsView": "Auspex Details",
+  "views.healthView": "Auspex Health",
+  "views.couplingView": "Auspex Kopplung",
+  "views.knowledgeView": "Auspex Monopolwissen"
+}

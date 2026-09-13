@@ -9,6 +9,7 @@ import { AuspexSidebarProvider } from './providers/SidebarProvider';
 import { AuspexDetailsViewProvider } from './providers/DetailsViewProvider';
 import { AuspexHealthViewProvider } from './providers/HealthViewProvider';
 import { AuspexCouplingViewProvider } from './providers/CouplingViewProvider';
+import { AuspexKnowledgeViewProvider } from './providers/KnowledgeViewProvider';
 import { resolveLanguage, EXT_STRINGS } from './i18n';
 import { openFileInEditor } from './utils/navigation';
 import { AuspexGitContentProvider, AUSPEX_GIT_SCHEME } from './utils/gitDiff';
@@ -25,6 +26,7 @@ let sidebarProvider: AuspexSidebarProvider;
 let detailsViewProvider: AuspexDetailsViewProvider;
 let healthViewProvider: AuspexHealthViewProvider;
 let couplingViewProvider: AuspexCouplingViewProvider;
+let knowledgeViewProvider: AuspexKnowledgeViewProvider;
 let statusBarItem: vscode.StatusBarItem;
 let latestSnapshot: AnalysisSnapshot | null = null;
 let latestSelectedNode: TreeNode | null = null;
@@ -132,11 +134,24 @@ export async function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  knowledgeViewProvider = new AuspexKnowledgeViewProvider(
+    context.extensionUri,
+    workspacePath
+  );
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      AuspexKnowledgeViewProvider.viewType,
+      knowledgeViewProvider
+    )
+  );
+
   if (latestSnapshot) {
     overviewProvider.updateSnapshot(latestSnapshot);
     sidebarProvider.updateSnapshot(latestSnapshot);
     healthViewProvider.updateSnapshot(latestSnapshot);
     couplingViewProvider.updateSnapshot(latestSnapshot);
+    knowledgeViewProvider.updateSnapshot(latestSnapshot);
   }
 
   // 3. Register Commands
@@ -171,6 +186,7 @@ export async function activate(context: vscode.ExtensionContext) {
         detailsViewProvider.selectedNode ||
         healthViewProvider.selectedNode ||
         couplingViewProvider.selectedNode ||
+        knowledgeViewProvider.selectedNode ||
         sidebarProvider.selectedNode;
       if (!node) return;
       const targetFilePath = (node.path || '').split('#')[0].replace(/^\//, '');
@@ -281,6 +297,7 @@ export async function activate(context: vscode.ExtensionContext) {
     detailsViewProvider.setSelectedNode(node, reveal);
     healthViewProvider.setSelectedNode(node, reveal);
     couplingViewProvider.setSelectedNode(node, reveal);
+    knowledgeViewProvider.setSelectedNode(node, reveal);
   };
 
   updateDetailsForEditor = (editor: vscode.TextEditor | undefined) => {
@@ -399,6 +416,7 @@ async function runScan(
       sidebarProvider.updateSnapshot(snapshot);
       healthViewProvider.updateSnapshot(snapshot);
       couplingViewProvider.updateSnapshot(snapshot);
+      knowledgeViewProvider.updateSnapshot(snapshot);
       if (TreemapPanel.currentPanel) {
         TreemapPanel.currentPanel.sendSnapshot(snapshot);
       }

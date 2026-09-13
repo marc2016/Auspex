@@ -203,9 +203,16 @@ describe('TreeAggregator', () => {
     // Class node inherits file contributors and commits
     const moduleA = srcFolder?.children?.find((c) => c.name === 'moduleA.ts');
     expect(moduleA?.contributors?.[0].name).toBe('Dev One');
+    expect(moduleA?.primaryAuthor).toBe('Dev One');
+    expect(moduleA?.primaryAuthorPercentage).toBe(100);
+    expect(moduleA?.knowledgeRisk).toBeDefined();
+
     const serviceA = moduleA?.children?.find((c) => c.name === 'ServiceA');
     expect(serviceA?.contributors?.[0].name).toBe('Dev One');
     expect(serviceA?.commits?.[0].hash).toBe('sha1');
+    expect(serviceA?.primaryAuthor).toBe('Dev One');
+    expect(serviceA?.primaryAuthorPercentage).toBe(100);
+    expect(serviceA?.knowledgeRisk).toBeDefined();
   });
 
   it('caps folder commits to 100 most recent to prevent snapshot explosion while keeping total commitCount exact', () => {

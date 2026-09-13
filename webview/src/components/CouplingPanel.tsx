@@ -8,6 +8,7 @@ import {
   mdiFileCodeOutline,
   mdiOpenInNew,
   mdiGit,
+  mdiClose,
 } from '@mdi/js';
 
 interface Props {
@@ -137,6 +138,49 @@ export const CouplingPanel: React.FC<Props> = ({
           >
             {targetFilePath}
           </span>
+
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
+            {onOpenFile && targetFilePath && (
+              <button
+                onClick={() => onOpenFile(targetFilePath, node?.startLine, node?.endLine)}
+                title={cStrings.openFile || (language === 'de' ? 'Im Editor öffnen' : 'Open in Editor')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  padding: '2px 3px',
+                  borderRadius: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              >
+                <Icon path={mdiOpenInNew} size={0.6} />
+              </button>
+            )}
+            {onClearSelection && (
+              <button
+                onClick={onClearSelection}
+                title={cStrings.backToProject || (language === 'de' ? 'Auswahl aufheben' : 'Clear selection')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'var(--text-secondary)',
+                  padding: '2px 3px',
+                  borderRadius: 3,
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+              >
+                <Icon path={mdiClose} size={0.6} />
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -291,7 +335,7 @@ export const CouplingPanel: React.FC<Props> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Icon path={mdiGit} size={0.5} />
                         <span>
-                          {c.coChanges} {cStrings.coCommits} ({c.totalCommits} total)
+                          {c.coChanges} {cStrings.coCommits} ({c.totalCommits} {t.total})
                         </span>
                       </div>
 

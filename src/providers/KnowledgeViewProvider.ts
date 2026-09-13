@@ -6,8 +6,8 @@ import { openFileInEditor } from '../utils/navigation';
 import { openCommitDiffInEditor } from '../utils/gitDiff';
 import { resolveLanguage, EXT_STRINGS } from '../i18n';
 
-export class AuspexHealthViewProvider implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'auspex.healthView';
+export class AuspexKnowledgeViewProvider implements vscode.WebviewViewProvider {
+  public static readonly viewType = 'auspex.knowledgeView';
 
   private _view?: vscode.WebviewView;
   private readonly _extensionUri: vscode.Uri;
@@ -69,7 +69,7 @@ export class AuspexHealthViewProvider implements vscode.WebviewViewProvider {
         case 'ready':
           webviewView.webview.postMessage({
             type: 'init',
-            view: 'health',
+            view: 'knowledge',
             language: resolveLanguage(),
             node: this._selectedNode,
           });
@@ -134,7 +134,7 @@ export class AuspexHealthViewProvider implements vscode.WebviewViewProvider {
       // Inject view mode marker into head
       html = html.replace(
         '<head>',
-        '<head><script>window.__AUSPEX_VIEW__ = "health";</script>'
+        '<head><script>window.__AUSPEX_VIEW__ = "knowledge";</script>'
       );
 
       const lang = resolveLanguage();
@@ -144,7 +144,7 @@ export class AuspexHealthViewProvider implements vscode.WebviewViewProvider {
 
     const lang = resolveLanguage();
     const t = EXT_STRINGS[lang];
-    const title = t.viewTitles.health;
+    const title = t.viewTitles.knowledge;
 
     return `<!DOCTYPE html>
       <html lang="${lang}">

@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as d3 from 'd3';
 import type { TreeNode } from '../../../src/analyzer/types';
+import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { getCodeHealthColor } from './SystemMapViewer';
+import { Icon } from './Icon';
+import { mdiInformationOutline } from '@mdi/js';
 
 export type TreemapViewMode = 'files' | 'classes' | 'functions' | 'hierarchy';
 export type SizeMetric = 'loc' | 'churn' | 'fixes' | 'added';
-export type ColorMetric = 'fixes' | 'churn' | 'growth' | 'recency' | 'health' | 'coupling' | 'loc';
+export type ColorMetric = 'fixes' | 'churn' | 'growth' | 'recency' | 'health' | 'coupling' | 'knowledge' | 'loc';
 
 interface Props {
   tree: TreeNode;
@@ -15,6 +18,7 @@ interface Props {
   maxItems?: number;
   onNodeClick?: (node: TreeNode) => void;
   selectedNode?: TreeNode | null;
+  language?: Language;
 }
 
 function useIsLightTheme(): boolean {
@@ -26,24 +30,14 @@ function useIsLightTheme(): boolean {
   });
 
   useEffect(() => {
-    const checkTheme = () => {
-      const light =
+    const observer = new MutationObserver(() => {
+      setIsLight(
         document.body.classList.contains('vscode-light') ||
-        document.body.classList.contains('vscode-high-contrast-light');
-      setIsLight(light);
-    };
-
-    const observer = new MutationObserver(checkTheme);
+        document.body.classList.contains('vscode-high-contrast-light')
+      );
+    });
     observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-
-    const mediaQuery = window.matchMedia?.('(prefers-color-scheme: light)');
-    const handleMedia = () => checkTheme();
-    mediaQuery?.addEventListener?.('change', handleMedia);
-
-    return () => {
-      observer.disconnect();
-      mediaQuery?.removeEventListener?.('change', handleMedia);
-    };
+    return () => observer.disconnect();
   }, []);
 
   return isLight;
@@ -77,45 +71,27 @@ export function getHeatColor(score: number, isLight: boolean): string {
     const t = (normalized - 0.5) * 2;
     r = Math.round(234 + t * (239 - 234));
     g = Math.round(179 - t * (179 - 68));
-    b = Math.round(8 - t * 8);
+    b = Math.round(8 - t * (8 - 68));
   }
-
-  return `rgba(${r}, ${g}, ${b}, 0.85)`;
+  return `rgba(${r}, ${g}, ${b}, 0.95)`;
 }
 
 export function getGrowthColor(linesAdded: number, maxAdded: number, isLight: boolean): string {
-  const ratio = Math.max(0, Math.min(linesAdded / Math.max(maxAdded, 1), 1));
-  if (isLight) {
-    const r = Math.round(45 + ratio * (16 - 45));
-    const g = Math.round(212 + ratio * (235 - 212));
-    const b = Math.round(191 + ratio * (160 - 191));
-    return `rgba(${r}, ${g}, ${b}, 0.95)`;
+  if (maxAdded <= 0 || linesAdded <= 0) {
+    return isLight ? 'rgba(226, 232, 240, 0.85)' : 'rgba(51, 65, 85, 0.6)';
   }
-
-  const r = Math.round(16 + ratio * (6 - 16));
-  const g = Math.round(185 + ratio * (214 - 185));
-  const b = Math.round(129 + ratio * (240 - 129));
-  return `rgba(${r}, ${g}, ${b}, 0.85)`;
+  const ratio = Math.min(linesAdded / maxAdded, 1);
+  return getHeatColor(ratio, isLight);
 }
 
-export function getRecencyColor(lastModifiedAt: number | undefined, isLight: boolean): string {
-  if (!lastModifiedAt) {
-    return isLight ? 'rgba(203, 213, 225, 0.9)' : 'rgba(148, 163, 184, 0.7)';
+export function getRecencyColor(timestamp: number | undefined, isLight: boolean): string {
+  if (!timestamp) {
+    return isLight ? 'rgba(226, 232, 240, 0.85)' : 'rgba(51, 65, 85, 0.6)';
   }
-  const ageDays = (Date.now() - lastModifiedAt) / (1000 * 60 * 60 * 24);
-  const freshness = Math.max(0, Math.min(1 - ageDays / 90, 1));
-
-  if (isLight) {
-    const r = Math.round(96 + (1 - freshness) * (203 - 96));
-    const g = Math.round(165 + (1 - freshness) * (213 - 165));
-    const b = Math.round(250 + (1 - freshness) * (225 - 250));
-    return `rgba(${r}, ${g}, ${b}, 0.95)`;
-  }
-
-  const r = Math.round(79 + (1 - freshness) * (148 - 79));
-  const g = Math.round(70 + (1 - freshness) * (163 - 70));
-  const b = Math.round(229 + (1 - freshness) * (184 - 229));
-  return `rgba(${r}, ${g}, ${b}, 0.85)`;
+  const now = Date.now();
+  const ageDays = (now - timestamp) / (1000 * 60 * 60 * 24);
+  const score = Math.max(0, 1 - ageDays / 90);
+  return getHeatColor(score, isLight);
 }
 
 export function getCouplingColor(node: TreeNode, isLight: boolean): string {
@@ -128,6 +104,57 @@ export function getCouplingColor(node: TreeNode, isLight: boolean): string {
     return isLight ? 'rgba(226, 232, 240, 0.85)' : 'rgba(51, 65, 85, 0.6)';
   }
   return getHeatColor(maxCoupling, isLight);
+}
+
+export function getKnowledgeColor(node: TreeNode, isLight: boolean): string {
+  // 1. Resolve primary author with fallback to first contributor
+  const primaryAuthor = node.primaryAuthor || node.contributors?.[0]?.name;
+  const contributors = node.contributors || [];
+  const commitCount = node.commitCount ?? 0;
+
+  // If node has no author information and no contributors at all
+  if (!primaryAuthor && contributors.length === 0) {
+    return isLight ? 'rgba(226, 232, 240, 0.85)' : 'rgba(51, 65, 85, 0.6)';
+  }
+
+  // 2. Resolve percentage: default to contributors percentage or 100% if primary author is present
+  const pct =
+    node.primaryAuthorPercentage ??
+    contributors[0]?.percentage ??
+    (primaryAuthor ? 100 : 0);
+
+  // 3. Resolve risk level
+  let risk: 'high' | 'medium' | 'low';
+  if (node.knowledgeRisk) {
+    risk = node.knowledgeRisk;
+  } else {
+    const churnScore = node.churnScore ?? 0;
+    const loc = node.loc ?? 0;
+    const contribCount = contributors.length || 1;
+
+    if (pct >= 75 && commitCount >= 2) {
+      if (churnScore >= 0.25 || loc >= 150 || contribCount === 1) {
+        risk = 'high';
+      } else {
+        risk = 'medium';
+      }
+    } else if (pct >= 75) {
+      risk = loc >= 150 ? 'high' : 'medium';
+    } else if (pct >= 50 || contribCount <= 2) {
+      risk = 'medium';
+    } else {
+      risk = 'low';
+    }
+  }
+
+  // 4. Distinct, beautiful risk colors matching the design system
+  if (risk === 'high') {
+    return isLight ? 'rgba(239, 68, 68, 0.92)' : 'rgba(220, 38, 38, 0.95)';
+  }
+  if (risk === 'medium') {
+    return isLight ? 'rgba(245, 158, 11, 0.92)' : 'rgba(217, 119, 6, 0.95)';
+  }
+  return isLight ? 'rgba(16, 185, 129, 0.92)' : 'rgba(5, 150, 105, 0.95)';
 }
 
 export function collectNodes(
@@ -206,15 +233,16 @@ export function prepareHierarchy(node: TreeNode): TreeNode {
   };
 }
 
-export function renderTooltipHtml(n: TreeNode, isLight: boolean): string {
+export function renderTooltipHtml(n: TreeNode, isLight: boolean, language: Language = 'de'): string {
+  const t = WEBVIEW_STRINGS[language]?.tooltip || WEBVIEW_STRINGS.de.tooltip;
   const typeLabel =
     n.type === 'method'
-      ? 'Funktion / Methode'
+      ? t.method
       : n.type === 'class'
-      ? 'Klasse / Struct'
+      ? t.class
       : n.type === 'file'
-      ? 'Datei'
-      : 'Ordner';
+      ? t.file
+      : t.folder;
 
   const churnPct = Math.round((n.churnScore ?? 0) * 100);
   const churnColor =
@@ -237,7 +265,7 @@ export function renderTooltipHtml(n: TreeNode, isLight: boolean): string {
         </span>
         ${
           n.startLine
-            ? `<span style="font-size: 11px; color: ${isLight ? '#2563eb' : '#38bdf8'}; font-weight: 500;">Zeilen ${n.startLine}–${n.endLine}</span>`
+            ? `<span style="font-size: 11px; color: ${isLight ? '#2563eb' : '#38bdf8'}; font-weight: 500;">${t.linesRange(n.startLine, n.endLine ?? n.startLine)}</span>`
             : ''
         }
       </div>
@@ -250,29 +278,29 @@ export function renderTooltipHtml(n: TreeNode, isLight: boolean): string {
           : ''
       }
       <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px;">
-        <span style="color: ${mutedColor};">Dateigröße (LOC):</span>
+        <span style="color: ${mutedColor};">${t.fileSize}</span>
         <strong style="color: ${textColor};">${(n.loc ?? 0).toLocaleString()}</strong>
       </div>
       <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px;">
-        <span style="color: ${mutedColor};">Git Commits:</span>
+        <span style="color: ${mutedColor};">${t.gitCommits}</span>
         <strong style="color: ${textColor};">${n.commitCount ?? 0}</strong>
       </div>
       ${
         n.fixCount != null && n.fixCount > 0
           ? `<div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px;">
-              <span style="color: ${mutedColor};">Bugfixes:</span>
+              <span style="color: ${mutedColor};">${t.bugFixesCount}</span>
               <strong style="color: #ef4444;">${n.fixCount}</strong>
             </div>`
           : ''
       }
       <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-top: 4px; padding-top: 4px; border-top: 1px solid ${dividerColor};">
-        <span style="color: ${mutedColor};">Hotspot Churn:</span>
+        <span style="color: ${mutedColor};">${t.hotspotChurn}</span>
         <strong style="color: ${churnColor}; font-weight: 600;">${churnPct}%</strong>
       </div>
       ${
         n.codeHealth != null
           ? `<div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-top: 3px;">
-              <span style="color: ${mutedColor};">Code Health:</span>
+              <span style="color: ${mutedColor};">${t.codeHealth}</span>
               <strong style="color: ${n.codeHealth >= 9 ? '#10b981' : n.codeHealth >= 6 ? '#f59e0b' : '#ef4444'}; font-weight: 600;">${n.codeHealth.toFixed(1)}/10</strong>
             </div>`
           : ''
@@ -283,12 +311,43 @@ export function renderTooltipHtml(n: TreeNode, isLight: boolean): string {
               const maxCoupling = Math.max(...n.temporalCoupling.map((c) => c.couplingDegree));
               const maxPct = Math.round(maxCoupling * 100);
               const coupColor = maxCoupling >= 0.7 ? '#ef4444' : maxCoupling >= 0.4 ? '#f59e0b' : '#10b981';
+              const partnerLabel = n.temporalCoupling.length === 1 ? t.partnerSingle : t.partnerPlural;
               return `<div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-top: 3px;">
-                <span style="color: ${mutedColor};">Max. Kopplung:</span>
-                <strong style="color: ${coupColor}; font-weight: 600;">${maxPct}% (${n.temporalCoupling.length} Partner)</strong>
+                <span style="color: ${mutedColor};">${t.maxCoupling}</span>
+                <strong style="color: ${coupColor}; font-weight: 600;">${maxPct}% (${n.temporalCoupling.length} ${partnerLabel})</strong>
               </div>`;
             })()
           : ''
+      }
+      ${
+        (() => {
+          const author = n.primaryAuthor || n.contributors?.[0]?.name;
+          if (!author) return '';
+          const pct = Math.round(
+            n.primaryAuthorPercentage ?? n.contributors?.[0]?.percentage ?? 100
+          );
+          const risk = n.knowledgeRisk || (pct >= 75 ? 'high' : pct >= 50 ? 'medium' : 'low');
+          const riskColor = risk === 'high' ? '#ef4444' : risk === 'medium' ? '#f59e0b' : '#10b981';
+          const riskLabel =
+            risk === 'high'
+              ? (t.highRisk || 'Hohes Risiko (≥ 75%)')
+              : risk === 'medium'
+              ? (t.mediumRisk || 'Mittleres Risiko (50–74%)')
+              : (t.lowRisk || 'Geteiltes Wissen (< 50%)');
+
+          return `
+            <div style="margin-top: 4px; padding-top: 4px; border-top: 1px solid ${dividerColor};">
+              <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 2px;">
+                <span style="color: ${mutedColor};">${t.primaryAuthor}</span>
+                <strong style="color: ${riskColor}; font-weight: 600;">${author} (${pct}%)</strong>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 11.5px;">
+                <span style="color: ${mutedColor};">${t.monopolyRisk || 'Monopolrisiko:'}</span>
+                <strong style="color: ${riskColor}; font-weight: 600;">${riskLabel}</strong>
+              </div>
+            </div>
+          `;
+        })()
       }
     </div>
   `;
@@ -302,6 +361,7 @@ export const TreemapViewer: React.FC<Props> = ({
   maxItems = 100,
   onNodeClick,
   selectedNode,
+  language = 'de',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -365,6 +425,8 @@ export const TreemapViewer: React.FC<Props> = ({
       return getGrowthColor(node.linesAdded || 0, maxAdded, isLight);
     } else if (colorMetric === 'recency') {
       return getRecencyColor(node.lastModifiedAt, isLight);
+    } else if (colorMetric === 'knowledge') {
+      return getKnowledgeColor(node, isLight);
     }
     return isLight ? '#60a5fa' : '#3b82f6';
   };
@@ -464,7 +526,7 @@ export const TreemapViewer: React.FC<Props> = ({
           .select('rect')
           .style('filter', 'brightness(1.18)');
         if (tooltipRef.current) {
-          tooltipRef.current.innerHTML = renderTooltipHtml(d.data, isLight);
+          tooltipRef.current.innerHTML = renderTooltipHtml(d.data, isLight, language);
           tooltipRef.current.style.display = 'block';
           updateTooltipPosition(event);
         }
@@ -540,13 +602,66 @@ export const TreemapViewer: React.FC<Props> = ({
       const maxChars = Math.max(3, Math.floor(w / 7.2));
       const displayName = name.length > maxChars ? name.slice(0, Math.max(1, maxChars - 1)) + '…' : name;
 
-      const canFitTwoLines = h >= 36 && w >= 48;
+      const author = n.primaryAuthor || n.contributors?.[0]?.name;
+      const pct = Math.round(
+        n.primaryAuthorPercentage ?? n.contributors?.[0]?.percentage ?? (author ? 100 : 0)
+      );
+      const isKnowledgeMode = colorMetric === 'knowledge';
+      const knowledgeLine = author
+        ? (w >= 75 ? `${author} (${pct}%)` : `${pct}%`)
+        : `${pct}% Monopol`;
 
-      if (canFitTwoLines) {
+      const canFitThreeLines = isKnowledgeMode && h >= 50 && w >= 48;
+      const canFitTwoLines = h >= 34 && w >= 42;
+
+      const titleColor = isLight ? '#0f172a' : '#ffffff';
+      const subColor = isLight ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255, 255, 255, 0.82)';
+      const knowledgeColor = isLight ? '#0f172a' : '#ffffff';
+
+      if (canFitThreeLines) {
+        const loc = (n.loc ?? 0).toLocaleString();
+        const locText =
+          n.commitCount && n.commitCount > 0 && w >= 95
+            ? `${loc} LOC · ${n.commitCount} Commits`
+            : `${loc} LOC`;
+
+        // Line 1: File/Class name
+        text
+          .append('tspan')
+          .attr('x', w / 2)
+          .attr('dy', '-1.15em')
+          .attr('font-size', '11.5px')
+          .attr('font-weight', '600')
+          .attr('fill', titleColor)
+          .text(displayName);
+
+        // Line 2: LOC & Commits
+        text
+          .append('tspan')
+          .attr('x', w / 2)
+          .attr('dy', '1.25em')
+          .attr('font-size', '9.5px')
+          .attr('font-weight', '500')
+          .attr('fill', subColor)
+          .text(locText);
+
+        // Line 3: Dedicated new line for Monopolwissen
+        text
+          .append('tspan')
+          .attr('x', w / 2)
+          .attr('dy', '1.25em')
+          .attr('font-size', '9.5px')
+          .attr('font-weight', '600')
+          .attr('fill', knowledgeColor)
+          .text(knowledgeLine);
+      } else if (canFitTwoLines) {
         const loc = (n.loc ?? 0).toLocaleString();
         const coupledDegree = selectedCoupledMap?.get(n.path);
         let metricText = `${loc} LOC`;
-        if (coupledDegree !== undefined) {
+
+        if (isKnowledgeMode) {
+          metricText = knowledgeLine;
+        } else if (coupledDegree !== undefined) {
           metricText = `${Math.round(coupledDegree * 100)}% 🔗 · ${loc} LOC`;
         } else if (n.commitCount && n.commitCount > 0 && w >= 95) {
           metricText = `${loc} LOC · ${n.commitCount} Commits`;
@@ -555,10 +670,10 @@ export const TreemapViewer: React.FC<Props> = ({
         text
           .append('tspan')
           .attr('x', w / 2)
-          .attr('dy', '-0.25em')
+          .attr('dy', '-0.3em')
           .attr('font-size', '11.5px')
           .attr('font-weight', '600')
-          .attr('fill', '#000000')
+          .attr('fill', titleColor)
           .text(displayName);
 
         text
@@ -566,19 +681,21 @@ export const TreemapViewer: React.FC<Props> = ({
           .attr('x', w / 2)
           .attr('dy', '1.35em')
           .attr('font-size', '9.5px')
-          .attr('font-weight', '500')
-          .attr('fill', 'rgba(0, 0, 0, 0.75)')
+          .attr('font-weight', isKnowledgeMode ? '600' : '500')
+          .attr('fill', isKnowledgeMode ? knowledgeColor : subColor)
           .text(metricText);
       } else {
         text
           .attr('dominant-baseline', 'central')
           .attr('font-size', '11px')
           .attr('font-weight', '600')
-          .attr('fill', '#000000')
+          .attr('fill', titleColor)
           .text(displayName);
       }
     });
   }, [tree, viewMode, sizeMetric, colorMetric, maxItems, isLight, dimensions, selectedNode, selectedCoupledMap]);
+
+  const t = WEBVIEW_STRINGS[language] || WEBVIEW_STRINGS.de;
 
   return (
     <div
@@ -591,6 +708,88 @@ export const TreemapViewer: React.FC<Props> = ({
         backgroundColor: 'var(--bg-primary)',
       }}
     >
+      {/* Top Legend HUD matching active colorMetric */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 10,
+          left: 14,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          fontSize: 11,
+          color: 'var(--text-secondary)',
+          backgroundColor: 'var(--bg-card)',
+          padding: '5px 12px',
+          borderRadius: 20,
+          border: '1px solid var(--border-color)',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+          zIndex: 10,
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}
+      >
+        <span title={t.codeHealth.legendInfo} style={{ display: 'flex', alignItems: 'center' }}>
+          <Icon path={mdiInformationOutline} size={0.65} color="var(--text-secondary)" />
+        </span>
+        {colorMetric === 'health' ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#ef4444' }} />
+              <span>{t.codeHealth.unhealthy} (&lt;6)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#f59e0b' }} />
+              <span>{t.codeHealth.warning} (6-8)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#10b981' }} />
+              <span>{t.codeHealth.healthy} (&gt;8)</span>
+            </div>
+          </>
+        ) : colorMetric === 'churn' ? (
+          <>
+            <span style={{ fontSize: 10.5 }}>{t.legend.churn}</span>
+            <span style={{ color: '#10b981' }}>● {t.legend.churnLow}</span>
+            <span style={{ color: '#f59e0b' }}>● {t.legend.churnMed}</span>
+            <span style={{ color: '#ef4444' }}>● {t.legend.churnHigh}</span>
+          </>
+        ) : colorMetric === 'fixes' ? (
+          <>
+            <span style={{ fontSize: 10.5 }}>{t.legend.fixes}</span>
+            <span style={{ color: '#10b981' }}>● {t.legend.fixesNone}</span>
+            <span style={{ color: '#f59e0b' }}>● {t.legend.fixesSome}</span>
+            <span style={{ color: '#ef4444' }}>● {t.legend.fixesMany}</span>
+          </>
+        ) : colorMetric === 'growth' ? (
+          <>
+            <span style={{ fontSize: 10.5 }}>{t.legend.growth}</span>
+            <span style={{ color: '#60a5fa' }}>● {t.legend.growthLow}</span>
+            <span style={{ color: '#10b981' }}>● {t.legend.growthHigh}</span>
+          </>
+        ) : colorMetric === 'coupling' ? (
+          <>
+            <span style={{ fontSize: 10.5 }}>{t.legend.coupling}</span>
+            <span style={{ color: 'var(--accent-color)' }}>● {t.coupling.slightCoupling}</span>
+            <span style={{ color: '#f59e0b' }}>● {t.coupling.moderateCoupling}</span>
+            <span style={{ color: '#ef4444' }}>● {t.coupling.criticalCoupling}</span>
+          </>
+        ) : colorMetric === 'knowledge' ? (
+          <>
+            <span style={{ fontSize: 10.5 }}>{t.legend.knowledge}</span>
+            <span style={{ color: '#10b981' }}>● {t.knowledge.lowRisk}</span>
+            <span style={{ color: '#f59e0b' }}>● {t.knowledge.mediumRisk}</span>
+            <span style={{ color: '#ef4444' }}>● {t.knowledge.highRisk}</span>
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 10.5 }}>{t.legend.recency}</span>
+            <span style={{ color: '#3b82f6' }}>● {t.legend.fresh}</span>
+            <span style={{ opacity: 0.6 }}>● {t.legend.older}</span>
+          </>
+        )}
+      </div>
+
       <svg
         ref={svgRef}
         style={{

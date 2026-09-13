@@ -663,5 +663,105 @@ describe('Webview Helpers', () => {
       });
     });
   });
+
+  describe('getKnowledgeColor', () => {
+    it('returns crimson red for high monopoly risk', async () => {
+      const { getKnowledgeColor } = await import('../webview/src/components/TreemapViewer');
+      const highRiskNode: TreeNode = {
+        name: 'core.ts',
+        path: '/src/core.ts',
+        type: 'file',
+        value: 300,
+        loc: 300,
+        commitCount: 10,
+        primaryAuthor: 'Alice',
+        primaryAuthorPercentage: 90,
+        knowledgeRisk: 'high',
+      };
+
+      const lightColor = getKnowledgeColor(highRiskNode, true);
+      const darkColor = getKnowledgeColor(highRiskNode, false);
+
+      expect(lightColor).toBe('rgba(239, 68, 68, 0.92)');
+      expect(darkColor).toBe('rgba(220, 38, 38, 0.95)');
+    });
+
+    it('returns amber orange for medium concentration', async () => {
+      const { getKnowledgeColor } = await import('../webview/src/components/TreemapViewer');
+      const medRiskNode: TreeNode = {
+        name: 'util.ts',
+        path: '/src/util.ts',
+        type: 'file',
+        value: 80,
+        loc: 80,
+        commitCount: 4,
+        primaryAuthor: 'Bob',
+        primaryAuthorPercentage: 60,
+        knowledgeRisk: 'medium',
+      };
+
+      const lightColor = getKnowledgeColor(medRiskNode, true);
+      const darkColor = getKnowledgeColor(medRiskNode, false);
+
+      expect(lightColor).toBe('rgba(245, 158, 11, 0.92)');
+      expect(darkColor).toBe('rgba(217, 119, 6, 0.95)');
+    });
+
+    it('returns emerald green for low risk / healthy shared code', async () => {
+      const { getKnowledgeColor } = await import('../webview/src/components/TreemapViewer');
+      const lowRiskNode: TreeNode = {
+        name: 'shared.ts',
+        path: '/src/shared.ts',
+        type: 'file',
+        value: 120,
+        loc: 120,
+        commitCount: 8,
+        primaryAuthor: 'Charlie',
+        primaryAuthorPercentage: 40,
+        knowledgeRisk: 'low',
+      };
+
+      const lightColor = getKnowledgeColor(lowRiskNode, true);
+      const darkColor = getKnowledgeColor(lowRiskNode, false);
+
+      expect(lightColor).toBe('rgba(16, 185, 129, 0.92)');
+      expect(darkColor).toBe('rgba(5, 150, 105, 0.95)');
+    });
+
+    it('falls back to contributors[0] when primaryAuthor is not directly set', async () => {
+      const { getKnowledgeColor } = await import('../webview/src/components/TreemapViewer');
+      const nodeWithContributors: TreeNode = {
+        name: 'fallback.ts',
+        path: '/src/fallback.ts',
+        type: 'file',
+        value: 200,
+        loc: 200,
+        commitCount: 5,
+        contributors: [
+          { name: 'Dev', commits: 5, linesAdded: 200, linesDeleted: 10, percentage: 100 },
+        ],
+      };
+
+      const color = getKnowledgeColor(nodeWithContributors, true);
+      // Sole contributor with 5 commits and 200 loc should evaluate to high risk red
+      expect(color).toBe('rgba(239, 68, 68, 0.92)');
+    });
+
+    it('returns neutral grey for files without author or contributors', async () => {
+      const { getKnowledgeColor } = await import('../webview/src/components/TreemapViewer');
+      const emptyNode: TreeNode = {
+        name: 'untracked.md',
+        path: '/docs/untracked.md',
+        type: 'file',
+        value: 10,
+        loc: 10,
+        commitCount: 0,
+        contributors: [],
+      };
+
+      expect(getKnowledgeColor(emptyNode, true)).toBe('rgba(226, 232, 240, 0.85)');
+      expect(getKnowledgeColor(emptyNode, false)).toBe('rgba(51, 65, 85, 0.6)');
+    });
+  });
 });
 
