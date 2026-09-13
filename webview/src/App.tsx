@@ -7,9 +7,16 @@ import { TreemapDetailsPanel } from './components/TreemapDetailsPanel';
 import { CouplingPanel } from './components/CouplingPanel';
 import { KnowledgePanel } from './components/KnowledgePanel';
 import { TopBar } from './components/TopBar';
-import { WEBVIEW_STRINGS, useLanguage } from './i18n';
 import { Icon } from './components/Icon';
-import { mdiInformationOutline, mdiHeartPulse } from '@mdi/js';
+import { WEBVIEW_STRINGS, useLanguage } from './i18n';
+import {
+  mdiInformationOutline,
+  mdiHeartPulse,
+  mdiShieldCheckOutline,
+  mdiAlertCircleOutline,
+  mdiFormatListNumbered,
+  mdiFileCodeOutline,
+} from '@mdi/js';
 import type { AnalysisSnapshot, TreeNode, PipelineProgress } from '../../src/analyzer/types';
 import { type TimeframeOption, filterTreeByTimeframe } from './utils/timeframeFilter';
 
@@ -289,120 +296,293 @@ export const App: React.FC = () => {
         ) : viewModeType === 'health' ? (
           <div
             style={{
+              padding: '8px 10px',
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              gap: 10,
               height: '100%',
-              padding: '24px 16px',
-              textAlign: 'center',
-              gap: 12,
-              color: 'var(--text-secondary)',
               boxSizing: 'border-box',
               overflowY: 'auto',
             }}
           >
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: '50%',
-                backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Icon path={mdiHeartPulse} size={1.2} color="#10b981" />
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {t.codeHealth.noNodeSelectedHealthTitle}
-            </div>
-            <div style={{ fontSize: 11, lineHeight: 1.5, maxWidth: 260 }}>
-              {t.codeHealth.noNodeSelectedHealthDesc}
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon path={mdiHeartPulse} size={0.8} color="#10b981" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                Workspace Code Health
+              </span>
             </div>
 
-            {snapshot?.tree?.codeHealth !== undefined && (() => {
-              const sysScore = snapshot.tree.codeHealth;
+            {/* Top KPI Cards */}
+            {(() => {
+              const sysScore = snapshot?.tree?.codeHealth ?? 10.0;
               const isHealthy = sysScore >= 9.0;
               const isProblematic = sysScore >= 6.0 && sysScore < 9.0;
               const color = isHealthy ? '#10b981' : isProblematic ? '#f59e0b' : '#ef4444';
               const statusLabel = isHealthy ? t.codeHealth.healthy : isProblematic ? t.codeHealth.problematic : t.codeHealth.unhealthy;
 
               return (
-                <div
-                  style={{
-                    marginTop: 12,
-                    padding: '12px 14px',
-                    borderRadius: 8,
-                    backgroundColor: 'var(--bg-card)',
-                    border: `1px solid ${color}40`,
-                    width: '100%',
-                    maxWidth: 280,
-                    textAlign: 'left',
-                    boxSizing: 'border-box',
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
-                      Workspace {t.codeHealth.score}
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        color,
-                        backgroundColor: `${color}20`,
-                        padding: '1px 6px',
-                        borderRadius: 3,
-                      }}
-                    >
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <div
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      backgroundColor: 'var(--bg-card)',
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                        Score
+                      </span>
+                      <Icon path={mdiHeartPulse} size={0.65} color={color} />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                      <span style={{ fontSize: 20, fontWeight: 800, color }}>
+                        {sysScore.toFixed(1)}
+                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>/ 10.0</span>
+                    </div>
+                    <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
                       {statusLabel}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 4 }}>
-                    <span style={{ fontSize: 24, fontWeight: 800, color }}>
-                      {sysScore.toFixed(1)}
+
+                  <div
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      backgroundColor: 'var(--bg-card)',
+                      border: '1px solid var(--border-color)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 2,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                        Status
+                      </span>
+                      <Icon
+                        path={isHealthy ? mdiShieldCheckOutline : mdiAlertCircleOutline}
+                        size={0.65}
+                        color={color}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                      <span style={{ fontSize: 15, fontWeight: 800, color }}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
+                      Skala 1.0 – 10.0
                     </span>
-                    <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>/ 10.0</span>
                   </div>
                 </div>
               );
             })()}
+
+            {/* Hint / Instruction */}
+            <div
+              style={{
+                padding: '12px 14px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+                lineHeight: 1.4,
+              }}
+            >
+              <Icon path={mdiHeartPulse} size={0.8} color="#10b981" style={{ flexShrink: 0 }} />
+              <span>{t.codeHealth.noNodeSelectedHealthDesc}</span>
+            </div>
+
+            {/* Health Mode Explanation Card (at the bottom) */}
+            <div
+              style={{
+                marginTop: 'auto',
+                padding: '10px 12px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon path={mdiInformationOutline} size={0.7} color="var(--accent-color)" />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t.codeHealth.explanationTitle}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                <span>{t.codeHealth.explanationText}</span>
+              </div>
+              <div
+                style={{
+                  marginTop: 2,
+                  fontSize: 10,
+                  color: 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  borderTop: '1px solid var(--border-color)',
+                  paddingTop: 4,
+                }}
+              >
+                <Icon path={mdiInformationOutline} size={0.55} color="var(--text-secondary)" />
+                <span><strong>{t.codeHealth.recommendation}:</strong> {t.codeHealth.recommendationText}</span>
+              </div>
+            </div>
           </div>
         ) : (
           <div
             style={{
+              padding: '8px 10px',
               display: 'flex',
               flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
+              gap: 10,
               height: '100%',
-              padding: '24px 16px',
-              textAlign: 'center',
-              gap: 12,
-              color: 'var(--text-secondary)',
               boxSizing: 'border-box',
+              overflowY: 'auto',
             }}
           >
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Icon path={mdiInformationOutline} size={0.8} color="var(--accent-color)" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+                {language === 'de' ? 'Workspace-Übersicht' : 'Workspace Overview'}
+              </span>
+            </div>
+
+            {/* Top KPI Cards */}
+            {snapshot && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    backgroundColor: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                      {t.metrics.loc}
+                    </span>
+                    <Icon path={mdiFormatListNumbered} size={0.65} color="var(--accent-color)" />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
+                      {(snapshot.totalLoc || 0).toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>LOC</span>
+                  </div>
+                  <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
+                    Gesamter Code
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 6,
+                    backgroundColor: 'var(--bg-card)',
+                    border: '1px solid var(--border-color)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 2,
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                      Dateien
+                    </span>
+                    <Icon path={mdiFileCodeOutline} size={0.65} color="var(--accent-color)" />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                    <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
+                      {snapshot.totalFiles || 0}
+                    </span>
+                    <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>Dateien</span>
+                  </div>
+                  <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
+                    Im Projekt erfasst
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Hint / Instruction */}
             <div
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: '50%',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                padding: '12px 14px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
+                gap: 10,
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+                lineHeight: 1.4,
               }}
             >
-              <Icon path={mdiInformationOutline} size={1} color="var(--accent-color)" />
+              <Icon path={mdiInformationOutline} size={0.8} color="var(--accent-color)" style={{ flexShrink: 0 }} />
+              <div>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{t.noNodeSelectedTitle}</div>
+                <div>{t.noNodeSelectedDesc}</div>
+              </div>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
-              {t.noNodeSelectedTitle}
-            </div>
-            <div style={{ fontSize: 11, lineHeight: 1.5, maxWidth: 240 }}>
-              {t.noNodeSelectedDesc}
+
+            {/* Details Mode Explanation Card (at the bottom) */}
+            <div
+              style={{
+                marginTop: 'auto',
+                padding: '10px 12px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon path={mdiInformationOutline} size={0.7} color="var(--accent-color)" />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {t.detailsExplanationTitle}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                <span>{t.detailsExplanationText}</span>
+              </div>
+              <div
+                style={{
+                  marginTop: 2,
+                  fontSize: 10,
+                  color: 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  borderTop: '1px solid var(--border-color)',
+                  paddingTop: 4,
+                }}
+              >
+                <Icon path={mdiInformationOutline} size={0.55} color="var(--text-secondary)" />
+                <span><strong>{t.codeHealth.recommendation}:</strong> {t.detailsRecommendationText}</span>
+              </div>
             </div>
           </div>
         )}

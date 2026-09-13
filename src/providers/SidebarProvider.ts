@@ -9,11 +9,48 @@ const MDI_REFRESH = 'M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 
 const MDI_FILE_CODE = 'M14 2H6C4.89 2 4 2.9 4 4V20C4 21.11 4.89 22 6 22H18C19.11 22 20 21.11 20 20V8L14 2M18 20H6V4H13V9H18V20M9.54 15.65L11.63 17.74L10.35 19L7 15.65L10.35 12.3L11.63 13.56L9.54 15.65M17 15.65L13.65 19L12.38 17.74L14.47 15.65L12.38 13.56L13.65 12.3L17 15.65Z';
 const MDI_HELP_CIRCLE = 'M12 2A10 10 0 0 0 2 12A10 10 0 0 0 12 22A10 10 0 0 0 22 12A10 10 0 0 0 12 2M12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20M12 6A4 4 0 0 0 8 10H10A2 2 0 0 1 12 8A2 2 0 0 1 14 10C14 12 11 11.75 11 15H13C13 12.75 16 12.5 16 10A4 4 0 0 0 12 6Z';
 const MDI_SHIELD_CHECK = 'M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M10,17L6,13L7.41,11.59L10,14.17L16.59,7.58L18,9L10,17Z';
-const MDI_OPEN_IN_APP = 'M19 19H5V5H12V3H5C3.89 3 3 3.89 3 5V19C3 20.1 3.89 21 5 21H19C20.1 21 21 20.1 21 19V12H19V19M14 3V5H17.59L7.76 14.83L9.17 16.24L19 6.41V10H21V3H14Z';
+const MDI_OPEN_IN_NEW = 'M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z';
 const MDI_CLOSE = 'M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z';
 
 function renderMdiSvg(pathData: string, size = 16, color = 'currentColor'): string {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" style="vertical-align: middle; fill: ${color}; display: inline-block;"><path d="${pathData}"/></svg>`;
+}
+
+/**
+ * Shared renderer for selected file header bar in HTML webviews (matches FileHeader.tsx).
+ */
+export function renderFileHeaderHtml(
+  node: { name: string; path: string; type?: string; startLine?: number; endLine?: number },
+  lang: 'de' | 'en',
+  t: { openFile?: string; clearSelection?: string }
+): string {
+  const targetFilePath = (node.path || '').split('#')[0].replace(/^\//, '');
+  const openTooltip = t.openFile || (lang === 'de' ? 'Im Editor öffnen' : 'Open in Editor');
+  const clearTooltip = t.clearSelection || (lang === 'de' ? 'Auswahl aufheben' : 'Clear selection');
+
+  return `
+    <div class="file-indicator" title="${node.name} (${targetFilePath})">
+      <span class="file-name">${node.name}</span>
+      <span class="sep">—</span>
+      <span class="file-path">${targetFilePath}</span>
+      <div class="file-actions">
+        <button
+          class="icon-action-btn"
+          onclick="vscode.postMessage({ type: 'openFile', filePath: '${targetFilePath}'${node.startLine ? `, startLine: ${node.startLine}` : ''}${node.endLine ? `, endLine: ${node.endLine}` : ''} })"
+          title="${openTooltip}"
+        >
+          ${renderMdiSvg(MDI_OPEN_IN_NEW, 13, 'currentColor')}
+        </button>
+        <button
+          class="icon-action-btn"
+          onclick="vscode.postMessage({ type: 'clearSelection' })"
+          title="${clearTooltip}"
+        >
+          ${renderMdiSvg(MDI_CLOSE, 13, 'currentColor')}
+        </button>
+      </div>
+    </div>
+  `;
 }
 
 export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
@@ -25,18 +62,21 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
   private _onOpenTreemap: () => void;
   private _onRescan: () => Promise<void>;
   private _onOpenHelp?: () => void;
+  private _onClearSelection?: () => void;
   private _selectedNode: any = null;
 
   constructor(
     workspacePath: string,
     onOpenTreemap: () => void,
     onRescan: () => Promise<void>,
-    onOpenHelp?: () => void
+    onOpenHelp?: () => void,
+    onClearSelection?: () => void
   ) {
     this._workspacePath = workspacePath;
     this._onOpenTreemap = onOpenTreemap;
     this._onRescan = onRescan;
     this._onOpenHelp = onOpenHelp;
+    this._onClearSelection = onClearSelection;
   }
 
   public get selectedNode(): any {
@@ -66,6 +106,7 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.options = {
       enableScripts: true,
+      localResourceRoots: [vscode.Uri.file(this._workspacePath)],
     };
 
     webviewView.webview.html = this._getHtmlForWebview();
@@ -82,10 +123,20 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
           this._onOpenHelp?.();
           break;
         case 'openFile':
-          await openFileInEditor(this._workspacePath, data.filePath);
+          if (data.startLine !== undefined) {
+            await openFileInEditor(
+              this._workspacePath,
+              data.filePath,
+              data.startLine,
+              data.endLine
+            );
+          } else {
+            await openFileInEditor(this._workspacePath, data.filePath);
+          }
           break;
         case 'clearSelection':
           this._selectedNode = null;
+          this._onClearSelection?.();
           if (this._view) {
             this._view.webview.html = this._getHtmlForWebview();
           }
@@ -101,12 +152,7 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
 
     const selectedHotspotHtml = this._selectedNode ? `
       <div class="selected-card">
-        <div class="file-indicator" title="${this._selectedNode.name} (${this._selectedNode.path})">
-          <span class="type-badge">${this._selectedNode.type}</span>
-          <span class="file-name">${this._selectedNode.name}</span>
-          <span class="sep">—</span>
-          <span class="file-path">${this._selectedNode.path}</span>
-        </div>
+        ${renderFileHeaderHtml(this._selectedNode, lang, t)}
         <div class="hotspot-meta" style="padding-left: 0; margin-top: 4px;">
           <span>${(this._selectedNode.loc || 0).toLocaleString(lang === 'de' ? 'de-DE' : 'en-US')} LOC</span> · 
           <span>${this._selectedNode.commitCount || 0} ${t.commits}</span> · 
@@ -417,6 +463,30 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+            min-width: 0;
+          }
+          .file-indicator .file-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            flex-shrink: 0;
+          }
+          .file-indicator .icon-action-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--vscode-descriptionForeground, #858585);
+            padding: 2px 3px;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+          }
+          .file-indicator .icon-action-btn:hover {
+            color: var(--vscode-foreground, #cccccc);
+            background-color: var(--vscode-toolbar-hoverBackground, rgba(90, 93, 94, 0.31));
           }
           .hotspot-item {
             background-color: var(--vscode-editor-background);

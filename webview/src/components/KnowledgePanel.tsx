@@ -2,14 +2,13 @@ import React from 'react';
 import type { TreeNode, AnalysisSnapshot, KnowledgeSummary, ContributorStat, KnowledgeRiskItem } from '../../../src/analyzer/types';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
+import { FileHeader } from './FileHeader';
 import {
   mdiAccountMultipleOutline,
   mdiAlertCircleOutline,
+  mdiAlertOutline,
   mdiShieldCheckOutline,
-  mdiOpenInNew,
-  mdiAccountOutline,
   mdiFileCodeOutline,
-  mdiClose,
   mdiInformationOutline,
 } from '@mdi/js';
 
@@ -38,12 +37,13 @@ function getAuthorColor(index: number): string {
   return AUTHOR_PALETTE[index % AUTHOR_PALETTE.length];
 }
 
-function getRiskBadgeStyle(risk: string | undefined): { bg: string; border: string; color: string } {
+function getRiskBadgeStyle(risk: string | undefined): { bg: string; border: string; color: string; icon: string } {
   if (risk === 'high') {
     return {
       bg: 'rgba(239, 68, 68, 0.15)',
       border: 'rgba(239, 68, 68, 0.35)',
       color: '#ef4444',
+      icon: mdiAlertCircleOutline,
     };
   }
   if (risk === 'medium') {
@@ -51,12 +51,14 @@ function getRiskBadgeStyle(risk: string | undefined): { bg: string; border: stri
       bg: 'rgba(245, 158, 11, 0.15)',
       border: 'rgba(245, 158, 11, 0.35)',
       color: '#f59e0b',
+      icon: mdiAlertOutline,
     };
   }
   return {
     bg: 'rgba(16, 185, 129, 0.15)',
     border: 'rgba(16, 185, 129, 0.35)',
     color: '#10b981',
+    icon: mdiShieldCheckOutline,
   };
 }
 
@@ -76,9 +78,20 @@ export const KnowledgePanel: React.FC<Props> = ({
   const contributors: ContributorStat[] = node?.contributors || [];
   const knowledgeSummary: KnowledgeSummary | undefined = snapshot?.knowledgeSummary;
 
+  const hasContributors = contributors.length > 0 || Boolean(node?.primaryAuthor);
   const primaryAuthor = node?.primaryAuthor || (contributors[0]?.name);
-  const primaryPercentage = node?.primaryAuthorPercentage ?? (contributors[0]?.percentage ?? 100);
-  const riskLevel = node?.knowledgeRisk || (primaryPercentage >= 75 ? 'high' : primaryPercentage >= 50 ? 'medium' : 'low');
+  const primaryPercentage = hasContributors
+    ? (node?.primaryAuthorPercentage ?? (contributors[0]?.percentage ?? (node?.commitCount && contributors[0]?.commits ? Number(((contributors[0].commits / node.commitCount) * 100).toFixed(1)) : 100)))
+    : 0;
+  const riskLevel = node?.knowledgeRisk || (
+    !hasContributors
+      ? 'low'
+      : primaryPercentage >= 75
+      ? 'high'
+      : primaryPercentage >= 50
+      ? 'medium'
+      : 'low'
+  );
 
   return (
     <div
@@ -96,185 +109,109 @@ export const KnowledgePanel: React.FC<Props> = ({
       }}
     >
       {/* 1. Header with single-line node indicator if file mode */}
-      {isFileMode && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 11,
-            padding: '2px 0 6px 0',
-            borderBottom: '1px solid var(--border-color)',
-            color: 'var(--text-secondary)',
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-            textOverflow: 'ellipsis',
-            flexShrink: 0,
-          }}
-          title={`${node?.name} (${targetFilePath})`}
-        >
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5,
-              color: 'var(--accent-color)',
-              backgroundColor: 'rgba(59, 130, 246, 0.12)',
-              padding: '1px 5px',
-              borderRadius: 3,
-              flexShrink: 0,
-            }}
-          >
-            {node?.type || 'FILE'}
-          </span>
-          <span
-            style={{
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {node?.name}
-          </span>
-          <span style={{ fontSize: 10, opacity: 0.7 }}>
-            ({node?.loc ?? 0} {kStrings.metricsLoc || 'LOC'} · {node?.commitCount ?? 0} {kStrings.commitsLabel})
-          </span>
-
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
-            {onOpenFile && targetFilePath && (
-              <button
-                onClick={() => onOpenFile(targetFilePath, node?.startLine, node?.endLine)}
-                title={kStrings.openFile}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)',
-                  padding: '2px 3px',
-                  borderRadius: 3,
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-              >
-                <Icon path={mdiOpenInNew} size={0.6} />
-              </button>
-            )}
-            {onClearSelection && (
-              <button
-                onClick={onClearSelection}
-                title={kStrings.backToProject}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)',
-                  padding: '2px 3px',
-                  borderRadius: 3,
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-              >
-                <Icon path={mdiClose} size={0.6} />
-              </button>
-            )}
-          </div>
-        </div>
+      {isFileMode && node && (
+        <FileHeader
+          node={node}
+          filePath={targetFilePath}
+          onOpenFile={onOpenFile}
+          onClearSelection={onClearSelection}
+          language={language}
+          openFileTooltip={kStrings.openFile}
+          clearSelectionTooltip={kStrings.backToProject}
+          style={{ padding: '2px 0 6px 0', flexShrink: 0 }}
+        />
       )}
 
       {/* 2. FILE MODE: Specific File Knowledge Distribution */}
       {isFileMode ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {/* Status Badge Card */}
+          {/* Status KPI Section (structured like Health) */}
           {(() => {
             const style = getRiskBadgeStyle(riskLevel);
             const riskLabel =
-              riskLevel === 'high'
+              !hasContributors
+                ? (language === 'de' ? 'Kein Risiko / Keine Daten' : 'No Risk / No Data')
+                : riskLevel === 'high'
                 ? kStrings.highRisk
                 : riskLevel === 'medium'
                 ? kStrings.mediumRisk
                 : kStrings.lowRisk;
 
             return (
-              <div
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 6,
-                  backgroundColor: style.bg,
-                  border: `1px solid ${style.border}`,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Icon
-                    path={riskLevel === 'high' ? mdiAlertCircleOutline : mdiShieldCheckOutline}
-                    size={0.75}
-                    color={style.color}
-                  />
-                  <span style={{ fontSize: 12, fontWeight: 700, color: style.color }}>
-                    {riskLabel}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontSize: 26, fontWeight: 800, color: style.color }}>
+                    {hasContributors ? `${primaryPercentage.toFixed(1)}%` : '0%'}
                   </span>
+                  <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{kStrings.ownership}</span>
                 </div>
                 <span
                   style={{
                     fontSize: 10,
                     fontWeight: 700,
                     color: style.color,
-                    backgroundColor: 'var(--bg-card)',
-                    padding: '2px 6px',
+                    backgroundColor: style.bg,
+                    padding: '2px 8px',
                     borderRadius: 4,
+                    border: `1px solid ${style.border}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
                   }}
                 >
-                  {primaryPercentage.toFixed(1)}% {kStrings.ownership}
+                  <Icon path={style.icon} size={0.55} color={style.color} />
+                  <span>{riskLabel}</span>
                 </span>
               </div>
             );
           })()}
 
+          {/* Section Header: Contributors / Knowledge Distribution */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
+              <Icon path={mdiAccountMultipleOutline} size={0.7} color="var(--accent-color)" />
+              <span>{kStrings.fileTitle}</span>
+            </div>
+            <span
+              style={{
+                fontSize: 10,
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                padding: '2px 6px',
+                borderRadius: 10,
+                color: 'var(--text-secondary)',
+              }}
+            >
+              {contributors.length}
+            </span>
+          </div>
+
           {/* Stacked Ownership Bar */}
           {contributors.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 600 }}>
-                <span>{kStrings.fileTitle}</span>
-                <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                  {contributors.length} {contributors.length === 1 ? kStrings.authorSingle : kStrings.authorPlural}
-                </span>
-              </div>
-
-              {/* Progress Bar Container */}
-              <div
-                style={{
-                  height: 10,
-                  width: '100%',
-                  borderRadius: 5,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  backgroundColor: 'var(--border-color)',
-                }}
-              >
-                {contributors.map((c, i) => {
-                  const pct = c.percentage ?? (node?.commitCount ? (c.commits / node.commitCount) * 100 : 0);
-                  if (pct <= 0) return null;
-                  return (
-                    <div
-                      key={c.name}
-                      style={{
-                        width: `${pct}%`,
-                        height: '100%',
-                        backgroundColor: getAuthorColor(i),
-                      }}
-                      title={`${c.name}: ${pct.toFixed(1)}% (${c.commits} ${kStrings.commitsLabel})`}
-                    />
-                  );
-                })}
-              </div>
+            <div
+              style={{
+                height: 10,
+                width: '100%',
+                borderRadius: 5,
+                overflow: 'hidden',
+                display: 'flex',
+                backgroundColor: 'var(--border-color)',
+              }}
+            >
+              {contributors.map((c, i) => {
+                const pct = c.percentage ?? (node?.commitCount ? (c.commits / node.commitCount) * 100 : 0);
+                if (pct <= 0) return null;
+                return (
+                  <div
+                    key={c.name}
+                    style={{
+                      width: `${pct}%`,
+                      height: '100%',
+                      backgroundColor: getAuthorColor(i),
+                    }}
+                    title={`${c.name}: ${pct.toFixed(1)}% (${c.commits} ${kStrings.commitsLabel})`}
+                  />
+                );
+              })}
             </div>
           )}
 
@@ -288,6 +225,9 @@ export const KnowledgePanel: React.FC<Props> = ({
               contributors.map((c, i) => {
                 const color = getAuthorColor(i);
                 const pct = c.percentage ?? (node?.commitCount ? (c.commits / node.commitCount) * 100 : 0);
+                const linesInfo = (c.linesAdded || c.linesDeleted)
+                  ? ` (+${c.linesAdded || 0}/-${c.linesDeleted || 0})`
+                  : '';
 
                 return (
                   <div
@@ -343,7 +283,7 @@ export const KnowledgePanel: React.FC<Props> = ({
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <span style={{ color: 'var(--text-secondary)', fontSize: 10 }}>
-                        {c.commits}c ({c.linesAdded ? `+${c.linesAdded}` : ''}{c.linesDeleted ? ` -${c.linesDeleted}` : ''})
+                        {c.commits}c{linesInfo}
                       </span>
                       <span style={{ fontWeight: 700, color: 'var(--text-primary)', width: 42, textAlign: 'right' }}>
                         {pct.toFixed(1)}%
@@ -356,56 +296,76 @@ export const KnowledgePanel: React.FC<Props> = ({
           </div>
 
           {/* Explanation & Recommendation (at the bottom) */}
-          {(() => {
-            const style = getRiskBadgeStyle(riskLevel);
-            return (
-              <div
-                style={{
-                  marginTop: 6,
-                  padding: '10px 12px',
-                  borderRadius: 6,
-                  backgroundColor: style.bg,
-                  border: `1px solid ${style.border}`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 6,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Icon path={mdiInformationOutline} size={0.7} color={style.color} />
-                  <span style={{ fontSize: 11, fontWeight: 700, color: style.color }}>
-                    {riskLevel === 'high' ? kStrings.singleAuthorWarningTitle : kStrings.sharedKnowledgeTitle}
-                  </span>
-                </div>
+          {hasContributors ? (
+            (() => {
+              const style = getRiskBadgeStyle(riskLevel);
+              return (
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: '10px 12px',
+                    borderRadius: 6,
+                    backgroundColor: style.bg,
+                    border: `1px solid ${style.border}`,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Icon path={mdiInformationOutline} size={0.7} color={style.color} />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: style.color }}>
+                      {riskLevel === 'high' ? kStrings.singleAuthorWarningTitle : kStrings.sharedKnowledgeTitle}
+                    </span>
+                  </div>
 
-                <div style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.4 }}>
-                  {riskLevel === 'high' ? (
-                    <span>{kStrings.singleAuthorWarningText(primaryAuthor || kStrings.unknownAuthor, Number(primaryPercentage.toFixed(1)))}</span>
-                  ) : (
-                    <span>{kStrings.sharedKnowledgeText}</span>
+                  <div style={{ fontSize: 11, color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                    {riskLevel === 'high' ? (
+                      <span>{kStrings.singleAuthorWarningText(primaryAuthor || kStrings.unknownAuthor, Number(primaryPercentage.toFixed(1)))}</span>
+                    ) : (
+                      <span>{kStrings.sharedKnowledgeText}</span>
+                    )}
+                  </div>
+
+                  {riskLevel === 'high' && (
+                    <div
+                      style={{
+                        marginTop: 2,
+                        fontSize: 10,
+                        color: 'var(--text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        borderTop: `1px solid ${style.border}`,
+                        paddingTop: 4,
+                      }}
+                    >
+                      <Icon path={mdiInformationOutline} size={0.55} color="var(--text-secondary)" />
+                      <span><strong>{kStrings.recommendation}:</strong> {kStrings.recommendationText}</span>
+                    </div>
                   )}
                 </div>
-
-                {riskLevel === 'high' && (
-                  <div
-                    style={{
-                      marginTop: 2,
-                      fontSize: 10,
-                      color: 'var(--text-secondary)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      borderTop: `1px solid ${style.border}`,
-                      paddingTop: 4,
-                    }}
-                  >
-                    <Icon path={mdiInformationOutline} size={0.55} color="var(--text-secondary)" />
-                    <span><strong>{kStrings.recommendation}:</strong> {kStrings.recommendationText}</span>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+              );
+            })()
+          ) : (
+            <div
+              style={{
+                marginTop: 6,
+                padding: '10px 12px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+              }}
+            >
+              <Icon path={mdiInformationOutline} size={0.7} color="var(--text-secondary)" />
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                {kStrings.noAuthors}
+              </span>
+            </div>
+          )}
         </div>
       ) : (
         /* 3. GLOBAL / PROJECT MODE: Team Overview, Truck Factor, Key Developer Risks */
@@ -486,9 +446,20 @@ export const KnowledgePanel: React.FC<Props> = ({
               }}
               title={kStrings.monopolyFilesDesc}
             >
-              <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
-                {kStrings.monopolyFiles}
-              </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  {kStrings.monopolyFiles}
+                </span>
+                <Icon
+                  path={
+                    (knowledgeSummary?.monopolyPercentage ?? 0) >= 25
+                      ? mdiAlertCircleOutline
+                      : mdiShieldCheckOutline
+                  }
+                  size={0.65}
+                  color={(knowledgeSummary?.monopolyPercentage ?? 0) >= 25 ? '#ef4444' : '#10b981'}
+                />
+              </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                 <span
                   style={{
@@ -515,7 +486,7 @@ export const KnowledgePanel: React.FC<Props> = ({
           </div>
 
           {/* Key Authors Distribution */}
-          {knowledgeSummary && knowledgeSummary.topAuthors.length > 0 && (
+          {knowledgeSummary && (knowledgeSummary.topAuthors?.length ?? 0) > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -527,7 +498,7 @@ export const KnowledgePanel: React.FC<Props> = ({
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {knowledgeSummary.topAuthors.slice(0, 6).map((author, i) => {
+                {(knowledgeSummary.topAuthors || []).slice(0, 6).map((author, i) => {
                   const color = getAuthorColor(i);
                   return (
                     <div
@@ -592,7 +563,7 @@ export const KnowledgePanel: React.FC<Props> = ({
           )}
 
           {/* Critical Risk Monopoly Hotspots */}
-          {knowledgeSummary && knowledgeSummary.highestRiskFiles.length > 0 && (
+          {knowledgeSummary && (knowledgeSummary.highestRiskFiles?.length ?? 0) > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
@@ -604,7 +575,7 @@ export const KnowledgePanel: React.FC<Props> = ({
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {knowledgeSummary.highestRiskFiles.slice(0, 8).map((rf: KnowledgeRiskItem) => {
+                {(knowledgeSummary.highestRiskFiles || []).slice(0, 8).map((rf: KnowledgeRiskItem) => {
                   const badgeStyle = getRiskBadgeStyle(rf.riskLevel);
                   return (
                     <div

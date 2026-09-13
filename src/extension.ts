@@ -88,7 +88,8 @@ export async function activate(context: vscode.ExtensionContext) {
     workspacePath,
     () => openTreemap(context, workspacePath),
     () => runScan(context, workspacePath, true),
-    () => openHelp(context, workspacePath)
+    () => openHelp(context, workspacePath),
+    () => setSelectedNodeAcrossProviders?.(null, false)
   );
 
   context.subscriptions.push(
@@ -149,6 +150,7 @@ export async function activate(context: vscode.ExtensionContext) {
   if (latestSnapshot) {
     overviewProvider.updateSnapshot(latestSnapshot);
     sidebarProvider.updateSnapshot(latestSnapshot);
+    detailsViewProvider.updateSnapshot(latestSnapshot);
     healthViewProvider.updateSnapshot(latestSnapshot);
     couplingViewProvider.updateSnapshot(latestSnapshot);
     knowledgeViewProvider.updateSnapshot(latestSnapshot);
@@ -414,6 +416,7 @@ async function runScan(
       latestSnapshot = snapshot;
       overviewProvider.updateSnapshot(snapshot);
       sidebarProvider.updateSnapshot(snapshot);
+      detailsViewProvider.updateSnapshot(snapshot);
       healthViewProvider.updateSnapshot(snapshot);
       couplingViewProvider.updateSnapshot(snapshot);
       knowledgeViewProvider.updateSnapshot(snapshot);

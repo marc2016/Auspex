@@ -134,6 +134,10 @@ describe('AuspexSidebarProvider', () => {
     expect(mockWebviewView.webview.html).toContain('core.ts');
     expect(mockWebviewView.webview.html).toContain('src/core.ts');
     expect(mockWebviewView.webview.html).toContain('file-indicator');
+    expect(mockWebviewView.webview.html).toContain('file-actions');
+    expect(mockWebviewView.webview.html).toContain('icon-action-btn');
+    expect(mockWebviewView.webview.html).toContain("openFile', filePath: 'src/core.ts'");
+    expect(mockWebviewView.webview.html).toContain("clearSelection'");
     expect(mockWebviewView.webview.html).toContain('3 Bugfixes');
   });
 

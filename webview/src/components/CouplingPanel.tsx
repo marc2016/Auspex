@@ -2,6 +2,7 @@ import React from 'react';
 import type { TreeNode, AnalysisSnapshot, TemporalCoupling, ProjectCouplingPair } from '../../../src/analyzer/types';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
+import { FileHeader } from './FileHeader';
 import {
   mdiLinkVariant,
   mdiAlertOutline,
@@ -9,6 +10,9 @@ import {
   mdiOpenInNew,
   mdiGit,
   mdiClose,
+  mdiShieldCheckOutline,
+  mdiAlertCircleOutline,
+  mdiInformationOutline,
 } from '@mdi/js';
 
 interface Props {
@@ -49,6 +53,8 @@ export const CouplingPanel: React.FC<Props> = ({
   language,
   onOpenFile,
   onSelectNode,
+  onClearSelection,
+  onShowInGraph,
 }) => {
   const t = WEBVIEW_STRINGS[language];
   const cStrings = t.coupling;
@@ -57,6 +63,13 @@ export const CouplingPanel: React.FC<Props> = ({
   const targetFilePath = node?.path ? (node.path.split('#')[0] || '').replace(/^\//, '') : '';
   const couplings: TemporalCoupling[] = node?.temporalCoupling || [];
   const projectCouplings: ProjectCouplingPair[] = snapshot?.projectCouplings || [];
+
+  const maxCouplingDegree = couplings.length > 0
+    ? Math.max(...couplings.map((c) => c.couplingDegree))
+    : 0;
+  const strongCouplingsCount = projectCouplings.filter(
+    (p) => Math.max(p.degreeA, p.degreeB) >= 0.7
+  ).length;
 
   // Check for cross-directory architectural risk
   const hasCrossDirRisk = isFileMode && couplings.some((c) => {
@@ -81,135 +94,191 @@ export const CouplingPanel: React.FC<Props> = ({
         overflowY: 'auto',
       }}
     >
-      {/* 1. Single-line File Indicator (matches Details & Health panels 100%) */}
-      {isFileMode && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            fontSize: 11,
-            padding: '2px 0 6px 0',
-            borderBottom: '1px solid var(--border-color)',
-            color: 'var(--text-secondary)',
-            overflow: 'hidden',
-            whiteSpace: 'nowrap',
-            textOverflow: 'ellipsis',
-            flexShrink: 0,
-          }}
-          title={`${node?.name} (${targetFilePath})`}
-        >
-          <span
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5,
-              color: 'var(--accent-color)',
-              backgroundColor: 'rgba(59, 130, 246, 0.12)',
-              padding: '1px 5px',
-              borderRadius: 3,
-              flexShrink: 0,
-            }}
-          >
-            {node?.type || 'FILE'}
-          </span>
-          <span
-            style={{
-              fontWeight: 600,
-              color: 'var(--text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            {node?.name}
-          </span>
-          <span style={{ opacity: 0.4, flexShrink: 0 }}>—</span>
-          <span
-            style={{
-              fontFamily: 'var(--vscode-editor-font-family, monospace)',
-              fontSize: 10,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {targetFilePath}
-          </span>
+      {/* 1. File / Component Indicator & Actions Bar */}
+      {isFileMode && node && (
+        <FileHeader
+          node={node}
+          filePath={targetFilePath}
+          onOpenFile={onOpenFile}
+          onClearSelection={onClearSelection}
+          language={language}
+          openFileTooltip={cStrings.openFile}
+          clearSelectionTooltip={cStrings.backToProject}
+          style={{ padding: '2px 0 6px 0', flexShrink: 0 }}
+        />
+      )}
 
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
-            {onOpenFile && targetFilePath && (
-              <button
-                onClick={() => onOpenFile(targetFilePath, node?.startLine, node?.endLine)}
-                title={cStrings.openFile || (language === 'de' ? 'Im Editor öffnen' : 'Open in Editor')}
+      {/* 2. Top Status / Value Section (File Mode, structured like Health) */}
+      {isFileMode && (() => {
+        const pct = Math.round(maxCouplingDegree * 100);
+        const isHigh = maxCouplingDegree >= 0.7;
+        const isMed = maxCouplingDegree >= 0.4 && maxCouplingDegree < 0.7;
+        const isLow = maxCouplingDegree > 0 && maxCouplingDegree < 0.4;
+        const style = isHigh
+          ? { bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.35)', color: '#ef4444', icon: mdiAlertCircleOutline, label: cStrings.highCouplingRisk }
+          : isMed
+          ? { bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.35)', color: '#f59e0b', icon: mdiAlertOutline, label: cStrings.moderateCouplingRisk }
+          : isLow
+          ? { bg: 'rgba(59, 130, 246, 0.12)', border: 'rgba(59, 130, 246, 0.3)', color: 'var(--accent-color)', icon: mdiLinkVariant, label: cStrings.slightCouplingRisk }
+          : { bg: 'rgba(16, 185, 129, 0.12)', border: 'rgba(16, 185, 129, 0.3)', color: '#10b981', icon: mdiShieldCheckOutline, label: cStrings.noCouplingRisk };
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 26, fontWeight: 800, color: style.color }}>
+                  {pct}%
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{cStrings.maxCoupling}</span>
+              </div>
+              <span
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)',
-                  padding: '2px 3px',
-                  borderRadius: 3,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: style.color,
+                  backgroundColor: style.bg,
+                  padding: '2px 8px',
+                  borderRadius: 4,
+                  border: `1px solid ${style.border}`,
                   display: 'flex',
                   alignItems: 'center',
+                  gap: 4,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
               >
-                <Icon path={mdiOpenInNew} size={0.6} />
-              </button>
-            )}
-            {onClearSelection && (
-              <button
-                onClick={onClearSelection}
-                title={cStrings.backToProject || (language === 'de' ? 'Auswahl aufheben' : 'Clear selection')}
+                <Icon path={style.icon} size={0.55} color={style.color} />
+                <span>{style.label}</span>
+              </span>
+            </div>
+
+            {/* Coupling Progress Bar (like Health) */}
+            <div
+              style={{
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: 'var(--border-color)',
+                overflow: 'hidden',
+              }}
+            >
+              <div
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  color: 'var(--text-secondary)',
-                  padding: '2px 3px',
+                  width: `${Math.max(pct > 0 ? 5 : 0, Math.min(100, pct))}%`,
+                  height: '100%',
+                  backgroundColor: style.color,
+                  transition: 'width 0.3s ease',
                   borderRadius: 3,
-                  display: 'flex',
-                  alignItems: 'center',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-              >
-                <Icon path={mdiClose} size={0.6} />
-              </button>
-            )}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* 2. Project Mode Header & Top KPI Cards */}
+      {!isFileMode && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon path={mdiLinkVariant} size={0.8} color="var(--accent-color)" />
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {cStrings.projectTitle}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <div
+              style={{
+                padding: '8px 10px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  {cStrings.coupledPairs}
+                </span>
+                <Icon path={mdiLinkVariant} size={0.65} color="var(--accent-color)" />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)' }}>
+                  {projectCouplings.length}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                  {cStrings.linksCount}
+                </span>
+              </div>
+              <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
+                {cStrings.minCoupling} ≥ 20%
+              </span>
+            </div>
+
+            <div
+              style={{
+                padding: '8px 10px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 10, color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 600 }}>
+                  {cStrings.strongCouplings}
+                </span>
+                <Icon
+                  path={strongCouplingsCount > 0 ? mdiAlertCircleOutline : mdiShieldCheckOutline}
+                  size={0.65}
+                  color={strongCouplingsCount > 0 ? '#ef4444' : '#10b981'}
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <span
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 800,
+                    color: strongCouplingsCount > 0 ? '#ef4444' : '#10b981',
+                  }}
+                >
+                  {strongCouplingsCount}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                  ({projectCouplings.length > 0 ? Math.round((strongCouplingsCount / projectCouplings.length) * 100) : 0}%)
+                </span>
+              </div>
+              <span style={{ fontSize: 9, color: 'var(--text-secondary)', lineHeight: 1.2 }}>
+                {strongCouplingsCount > 0 ? cStrings.criticalCoupling : cStrings.noCouplingRisk}
+              </span>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 2. Section Header (matches Contributors & Biomarkers header style) */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
-          <Icon path={mdiLinkVariant} size={0.7} color="var(--accent-color)" />
-          <span>{isFileMode ? cStrings.fileTitle : cStrings.projectTitle}</span>
-        </div>
-        <span
-          style={{
-            fontSize: 10,
-            backgroundColor: 'rgba(255, 255, 255, 0.08)',
-            padding: '2px 6px',
-            borderRadius: 10,
-            color: 'var(--text-secondary)',
-          }}
-        >
-          {isFileMode ? couplings.length : projectCouplings.length}
-        </span>
-      </div>
-
-      {!isFileMode && (
-        <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: -4 }}>
-          {cStrings.projectSubtitle}
+      {/* 3. Section Header for File Mode */}
+      {isFileMode && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600 }}>
+            <Icon path={mdiLinkVariant} size={0.7} color="var(--accent-color)" />
+            <span>{cStrings.fileTitle}</span>
+          </div>
+          <span
+            style={{
+              fontSize: 10,
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              padding: '2px 6px',
+              borderRadius: 10,
+              color: 'var(--text-secondary)',
+            }}
+          >
+            {couplings.length}
+          </span>
         </div>
       )}
 
-      {/* 3. Main Content List */}
+      {/* 4. Main Content List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
         {/* FILE FOCUS MODE */}
         {isFileMode ? (
@@ -399,6 +468,45 @@ export const CouplingPanel: React.FC<Props> = ({
                 </div>
               </div>
             )}
+
+            {/* File Mode Explanation & Recommendation Card (at the bottom) */}
+            <div
+              style={{
+                marginTop: 6,
+                padding: '10px 12px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon path={mdiInformationOutline} size={0.7} color="var(--accent-color)" />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {cStrings.explanationTitle}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                <span>{cStrings.explanationText}</span>
+              </div>
+              <div
+                style={{
+                  marginTop: 2,
+                  fontSize: 10,
+                  color: 'var(--text-secondary)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  borderTop: '1px solid var(--border-color)',
+                  paddingTop: 4,
+                }}
+              >
+                <Icon path={mdiInformationOutline} size={0.55} color="var(--text-secondary)" />
+                <span><strong>{cStrings.recommendation}:</strong> {cStrings.recommendationText}</span>
+              </div>
+            </div>
           </>
         ) : (
           /* PROJECT-WIDE VIEW */
@@ -584,6 +692,30 @@ export const CouplingPanel: React.FC<Props> = ({
                 </div>
               </div>
             )}
+
+            {/* Project Mode Explanation Card (at the bottom) */}
+            <div
+              style={{
+                marginTop: 6,
+                padding: '10px 12px',
+                borderRadius: 6,
+                backgroundColor: 'var(--bg-card)',
+                border: '1px solid var(--border-color)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Icon path={mdiInformationOutline} size={0.7} color="var(--accent-color)" />
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {cStrings.projectSubtitle}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+                <span>{cStrings.explanationText}</span>
+              </div>
+            </div>
           </>
         )}
       </div>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { TreeNode } from '../../../src/analyzer/types';
 import { Icon } from './Icon';
+import { FileHeader } from './FileHeader';
 import {
   mdiClose,
   mdiOpenInApp,
@@ -286,14 +287,20 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
                 </div>
 
                 {/* Lines added / deleted */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, fontSize: 10 }}>
-                  <span style={{ color: '#22c55e', fontWeight: 600 }}>
-                    +{contrib.linesAdded.toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}
-                  </span>
-                  <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                    -{contrib.linesDeleted.toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}
-                  </span>
-                </div>
+                {(contrib.linesAdded !== undefined || contrib.linesDeleted !== undefined) && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, fontSize: 10 }}>
+                    {contrib.linesAdded !== undefined && (
+                      <span style={{ color: '#22c55e', fontWeight: 600 }}>
+                        +{contrib.linesAdded.toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}
+                      </span>
+                    )}
+                    {contrib.linesDeleted !== undefined && (
+                      <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                        -{contrib.linesDeleted.toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -920,6 +927,47 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
 
       {/* Commit History Section with Comparison & Diff (in Details panel) */}
       {mode === 'details' && node.commitCount !== 0 && renderCommitHistorySection()}
+
+      {/* Details Mode Explanation Card (at the bottom) */}
+      {mode === 'details' && (
+        <div
+          style={{
+            marginTop: 6,
+            padding: '10px 12px',
+            borderRadius: 6,
+            backgroundColor: 'var(--bg-card)',
+            border: '1px solid var(--border-color)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon path={mdiInformationOutline} size={0.7} color="var(--accent-color)" />
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {t.detailsExplanationTitle}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+            <span>{t.detailsExplanationText}</span>
+          </div>
+          <div
+            style={{
+              marginTop: 2,
+              fontSize: 10,
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              borderTop: '1px solid var(--border-color)',
+              paddingTop: 4,
+            }}
+          >
+            <Icon path={mdiInformationOutline} size={0.55} color="var(--text-secondary)" />
+            <span><strong>{t.codeHealth.recommendation}:</strong> {t.detailsRecommendationText}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -1125,6 +1173,45 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Health Mode Explanation Card (at the bottom) */}
+      <div
+        style={{
+          marginTop: 6,
+          padding: '10px 12px',
+          borderRadius: 6,
+          backgroundColor: 'var(--bg-card)',
+          border: '1px solid var(--border-color)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Icon path={mdiInformationOutline} size={0.7} color="var(--accent-color)" />
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {t.codeHealth.explanationTitle}
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4 }}>
+          <span>{t.codeHealth.explanationText}</span>
+        </div>
+        <div
+          style={{
+            marginTop: 2,
+            fontSize: 10,
+            color: 'var(--text-secondary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            borderTop: '1px solid var(--border-color)',
+            paddingTop: 4,
+          }}
+        >
+          <Icon path={mdiInformationOutline} size={0.55} color="var(--text-secondary)" />
+          <span><strong>{t.codeHealth.recommendation}:</strong> {t.codeHealth.recommendationText}</span>
+        </div>
+      </div>
     </>
   );
 
@@ -1151,105 +1238,14 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
       }}
     >
       {/* Single-line File Indicator */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          fontSize: 11,
-          padding: '2px 0 6px 0',
-          borderBottom: '1px solid var(--border-color)',
-          color: 'var(--text-secondary)',
-          overflow: 'hidden',
-          whiteSpace: 'nowrap',
-          textOverflow: 'ellipsis',
-          flexShrink: 0,
-        }}
-        title={`${node.name} (${targetFilePath})`}
-      >
-        <span
-          style={{
-            fontSize: 9,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-            color: 'var(--accent-color)',
-            backgroundColor: 'rgba(59, 130, 246, 0.12)',
-            padding: '1px 5px',
-            borderRadius: 3,
-            flexShrink: 0,
-          }}
-        >
-          {node.type}
-        </span>
-        <span
-          style={{
-            fontWeight: 600,
-            color: 'var(--text-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flexShrink: 0,
-          }}
-        >
-          {node.name}
-        </span>
-        <span style={{ opacity: 0.4, flexShrink: 0 }}>—</span>
-        <span
-          style={{
-            fontFamily: 'var(--vscode-editor-font-family, monospace)',
-            fontSize: 10,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {targetFilePath}
-        </span>
-
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexShrink: 0 }}>
-          {onOpenFile && targetFilePath && (
-            <button
-              onClick={() => onOpenFile(targetFilePath, node.startLine, node.endLine)}
-              title={t.coupling?.openFile || (language === 'de' ? 'Im Editor öffnen' : 'Open in Editor')}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-secondary)',
-                padding: '2px 3px',
-                borderRadius: 3,
-                display: 'flex',
-                alignItems: 'center',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-            >
-              <Icon path={mdiOpenInNew} size={0.6} />
-            </button>
-          )}
-          {onClose && (
-            <button
-              onClick={onClose}
-              title={t.clearSelection || (language === 'de' ? 'Auswahl aufheben' : 'Clear selection')}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-secondary)',
-                padding: '2px 3px',
-                borderRadius: 3,
-                display: 'flex',
-                alignItems: 'center',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
-            >
-              <Icon path={mdiClose} size={0.6} />
-            </button>
-          )}
-        </div>
-      </div>
+      <FileHeader
+        node={node}
+        filePath={targetFilePath}
+        onOpenFile={onOpenFile}
+        onClearSelection={onClose}
+        language={language}
+        style={{ padding: '2px 0 6px 0', flexShrink: 0 }}
+      />
 
       {/* 1. Details Section */}
       {showDetails && (

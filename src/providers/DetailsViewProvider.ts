@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import path from 'path';
 import fs from 'fs';
-import type { TreeNode } from '../analyzer/types';
+import type { TreeNode, AnalysisSnapshot } from '../analyzer/types';
 import { openFileInEditor } from '../utils/navigation';
 import { openCommitDiffInEditor } from '../utils/gitDiff';
 import { resolveLanguage, EXT_STRINGS } from '../i18n';
@@ -13,6 +13,7 @@ export class AuspexDetailsViewProvider implements vscode.WebviewViewProvider {
   private readonly _extensionUri: vscode.Uri;
   private readonly _workspacePath: string;
   private _selectedNode: TreeNode | null = null;
+  private _currentSnapshot: AnalysisSnapshot | null = null;
 
   constructor(extensionUri: vscode.Uri, workspacePath: string) {
     this._extensionUri = extensionUri;
@@ -21,6 +22,16 @@ export class AuspexDetailsViewProvider implements vscode.WebviewViewProvider {
 
   public get selectedNode(): TreeNode | null {
     return this._selectedNode;
+  }
+
+  public updateSnapshot(snapshot: AnalysisSnapshot): void {
+    this._currentSnapshot = snapshot;
+    if (this._view) {
+      this._view.webview.postMessage({
+        type: 'snapshot:update',
+        payload: snapshot,
+      });
+    }
   }
 
   public setSelectedNode(node: TreeNode | null, reveal = true): void {
@@ -62,6 +73,12 @@ export class AuspexDetailsViewProvider implements vscode.WebviewViewProvider {
             language: resolveLanguage(),
             node: this._selectedNode,
           });
+          if (this._currentSnapshot) {
+            webviewView.webview.postMessage({
+              type: 'snapshot:update',
+              payload: this._currentSnapshot,
+            });
+          }
           break;
         case 'openFile':
           await openFileInEditor(
