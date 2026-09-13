@@ -178,5 +178,36 @@ describe('AstStructureAnalyzer', () => {
       expect(parsed.loc).toBe(0);
       expect(parsed.fileHash).toBe('');
     });
+
+    it('applies the 2MB guardrail to skip AST parsing on oversized files to prevent OOM', () => {
+      const largeFilePath = path.join(tempDir, 'giant_bundle.ts');
+      // Create a file > 2MB (2.1 MB)
+      const chunk = 'console.log("data block of 100 bytes length for filling up memory safely for test! 0123456789");\n';
+      const repeatCount = Math.ceil((2.1 * 1024 * 1024) / chunk.length);
+      const fd = fs.openSync(largeFilePath, 'w');
+      for (let i = 0; i < repeatCount; i++) {
+        fs.writeSync(fd, chunk);
+      }
+      fs.closeSync(fd);
+
+      const parsed = analyzer.analyzeFile(largeFilePath, 'src/giant_bundle.ts');
+      expect(parsed.filePath).toBe('src/giant_bundle.ts');
+      expect(parsed.classes.length).toBe(0);
+      expect(parsed.methods.length).toBe(0);
+      expect(parsed.codeHealth).toBe(5.0);
+      const biomarker = parsed.biomarkers.find((b) => b.type === 'brain_class');
+      expect(biomarker).toBeDefined();
+      expect(biomarker?.details).toContain('Oversized file');
+    });
+
+    it('caches wildcard regex patterns efficiently across multiple calls', () => {
+      const customPatterns = ['*.spec.js', 'vendor/*', '.cache'];
+      expect(isPathIgnored('app.spec.js', 'test/app.spec.js', customPatterns)).toBe(true);
+      // Repeated check hits wildcardRegexCache
+      expect(isPathIgnored('other.spec.js', 'test/other.spec.js', customPatterns)).toBe(true);
+      expect(isPathIgnored('main.js', 'src/main.js', customPatterns)).toBe(false);
+      expect(isPathIgnored('.cache', '.cache', customPatterns)).toBe(true);
+    });
   });
 });
+

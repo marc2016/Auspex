@@ -22,7 +22,10 @@ export class GitChurnAnalyzer {
    * Runs git log with numstat to extract commit counts, churn lines, and author activity.
    * Returns a map of relative file paths to FileCommitStat.
    */
-  async analyze(workspacePath: string): Promise<Map<string, FileCommitStat>> {
+  async analyze(
+    workspacePath: string,
+    options?: { maxCommits?: number }
+  ): Promise<Map<string, FileCommitStat>> {
     const statsMap = new Map<string, FileCommitStat>();
 
     try {
@@ -32,12 +35,19 @@ export class GitChurnAnalyzer {
         return statsMap;
       }
 
-      const logOutput = await git.raw([
+      const args = [
         'log',
         '--numstat',
         '--format=COMMIT:%H|%at|%an|%s',
         '--diff-filter=ACDMRT',
-      ]);
+      ];
+
+      const maxCommits = options?.maxCommits ?? 15000;
+      if (maxCommits > 0) {
+        args.push(`--max-count=${maxCommits}`);
+      }
+
+      const logOutput = await git.raw(args);
 
       this.parseLogOutput(logOutput, statsMap);
     } catch (err) {
@@ -130,12 +140,32 @@ export class GitChurnAnalyzer {
       }
 
       // Parse numstat line: <added>\t<deleted>\t<filepath>
-      const match = rawLine.match(/^(\d+|-)\s+(\d+|-)\s+(.+)$/);
-      if (match) {
-        const added = match[1] === '-' ? 0 : parseInt(match[1], 10);
-        const deleted = match[2] === '-' ? 0 : parseInt(match[2], 10);
-        let filePath = match[3].trim().replace(/\\/g, '/');
+      let added = 0;
+      let deleted = 0;
+      let filePath = '';
 
+      const tab1 = rawLine.indexOf('\t');
+      if (tab1 !== -1) {
+        const tab2 = rawLine.indexOf('\t', tab1 + 1);
+        if (tab2 !== -1) {
+          const addedStr = rawLine.slice(0, tab1).trim();
+          const deletedStr = rawLine.slice(tab1 + 1, tab2).trim();
+          filePath = rawLine.slice(tab2 + 1).trim().replace(/\\/g, '/');
+          added = addedStr === '-' ? 0 : parseInt(addedStr, 10) || 0;
+          deleted = deletedStr === '-' ? 0 : parseInt(deletedStr, 10) || 0;
+        }
+      }
+
+      if (!filePath) {
+        const match = rawLine.match(/^(\d+|-)\s+(\d+|-)\s+(.+)$/);
+        if (match) {
+          added = match[1] === '-' ? 0 : parseInt(match[1], 10) || 0;
+          deleted = match[2] === '-' ? 0 : parseInt(match[2], 10) || 0;
+          filePath = match[3].trim().replace(/\\/g, '/');
+        }
+      }
+
+      if (filePath) {
         // Handle git file rename notation: {old_dir => new_dir}/file.ts or old.ts => new.ts
         if (filePath.includes('=>')) {
           filePath = this.resolveRenamePath(filePath);

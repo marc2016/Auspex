@@ -1,3 +1,4 @@
+import fs from 'fs';
 import path from 'path';
 import { simpleGit } from 'simple-git';
 import { GitChurnAnalyzer } from './gitChurn';
@@ -24,7 +25,8 @@ export class AuspexPipeline {
     onProgress?: (progress: PipelineProgress) => void,
     customIgnorePatterns?: string[],
     jiraClient?: JiraClient | null,
-    allowedProjectKeys?: string[]
+    allowedProjectKeys?: string[],
+    options?: { maxCommits?: number }
   ): Promise<AnalysisSnapshot> {
     const startTime = Date.now();
 
@@ -47,7 +49,9 @@ export class AuspexPipeline {
       percentage: 10,
     });
 
-    const commitStats = await this.churnAnalyzer.analyze(workspacePath);
+    const commitStats = await this.churnAnalyzer.analyze(workspacePath, {
+      maxCommits: options?.maxCommits,
+    });
 
     // Optional Jira ticket enrichment
     if (jiraClient) {
@@ -137,7 +141,21 @@ export class AuspexPipeline {
       let parsed: ParsedFileInfo;
       const cached = cachedFiles[relPath];
       if (cached && typeof cached.codeHealth === 'number') {
-        parsed = cached;
+        let isStale = false;
+        try {
+          const stat = fs.statSync(absPath);
+          if (cached.lastModifiedAt && stat.mtimeMs > cached.lastModifiedAt) {
+            isStale = true;
+          }
+        } catch {
+          isStale = true;
+        }
+
+        if (!isStale) {
+          parsed = cached;
+        } else {
+          parsed = this.astAnalyzer.analyzeFile(absPath, relPath);
+        }
       } else {
         parsed = this.astAnalyzer.analyzeFile(absPath, relPath);
       }

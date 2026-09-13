@@ -207,4 +207,92 @@ describe('TreeAggregator', () => {
     expect(serviceA?.contributors?.[0].name).toBe('Dev One');
     expect(serviceA?.commits?.[0].hash).toBe('sha1');
   });
+
+  it('caps folder commits to 100 most recent to prevent snapshot explosion while keeping total commitCount exact', () => {
+    const files: ParsedFileInfo[] = [
+      {
+        filePath: 'src/heavy.ts',
+        loc: 500,
+        fileHash: 'h-heavy',
+        classes: [],
+        methods: [],
+      },
+    ];
+
+    // Generate 150 distinct commits
+    const manyCommits = Array.from({ length: 150 }, (_, i) => ({
+      hash: `hash_${i}`,
+      author: 'Dev',
+      timestamp: 1700000000 + i * 10,
+      message: `commit ${i}`,
+      linesAdded: 2,
+      linesDeleted: 1,
+    }));
+
+    const stats = new Map<string, FileCommitStat>();
+    stats.set('src/heavy.ts', {
+      commitCount: 150,
+      fixCount: 20,
+      featCount: 50,
+      refactorCount: 10,
+      linesAdded: 300,
+      linesDeleted: 150,
+      lastModifiedAt: 1700001500,
+      commits: manyCommits,
+    });
+
+    const { tree } = aggregator.buildTree(files, stats);
+
+    // Root folder node and src folder node should have commits capped to 100
+    expect(tree.commitCount).toBe(150); // Exact count preserved
+    expect(tree.commits?.length).toBe(100); // Array capped at 100
+    // Capped commits are sorted newest first
+    expect(tree.commits?.[0].hash).toBe('hash_149');
+
+    const srcFolder = tree.children?.find((c) => c.name === 'src');
+    expect(srcFolder?.commitCount).toBe(150);
+    expect(srcFolder?.commits?.length).toBe(100);
+
+    // Individual file node preserves its full commit array
+    const heavyFile = srcFolder?.children?.find((c) => c.name === 'heavy.ts');
+    expect(heavyFile?.commitCount).toBe(150);
+    expect(heavyFile?.commits?.length).toBe(150);
+  });
+
+  it('caps folder biomarkers to 50 to prevent memory bloating in large projects', () => {
+    const files: ParsedFileInfo[] = [
+      {
+        filePath: 'src/smelly1.ts',
+        loc: 200,
+        fileHash: 'h-s1',
+        classes: [],
+        methods: [],
+        biomarkers: Array.from({ length: 35 }, (_, i) => ({
+          type: 'nested_complexity',
+          severity: 'medium',
+          details: `smell 1.${i}`,
+        })),
+      },
+      {
+        filePath: 'src/smelly2.ts',
+        loc: 200,
+        fileHash: 'h-s2',
+        classes: [],
+        methods: [],
+        biomarkers: Array.from({ length: 35 }, (_, i) => ({
+          type: 'complex_conditional',
+          severity: 'low',
+          details: `smell 2.${i}`,
+        })),
+      },
+    ];
+
+    const stats = new Map<string, FileCommitStat>();
+    const { tree } = aggregator.buildTree(files, stats);
+
+    const srcFolder = tree.children?.find((c) => c.name === 'src');
+    expect(srcFolder?.biomarkers?.length).toBe(50); // Capped from 70 to 50
+    expect(tree.biomarkers?.length).toBe(50);
+  });
 });
+

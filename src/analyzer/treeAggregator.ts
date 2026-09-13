@@ -91,12 +91,14 @@ export class TreeAggregator {
       return current;
     };
 
+    let maxCommits = 1;
     for (const file of files) {
       const dirName = path.dirname(file.filePath);
       const parentFolder = getOrCreateFolder(dirName);
       const fileStats = commitStats.get(file.filePath);
 
       const commitCount = fileStats?.commitCount ?? 0;
+      if (commitCount > maxCommits) maxCommits = commitCount;
       const fixCount = fileStats?.fixCount ?? 0;
       const featCount = fileStats?.featCount ?? 0;
       const refactorCount = fileStats?.refactorCount ?? 0;
@@ -242,12 +244,6 @@ export class TreeAggregator {
 
     this.aggregateLoc(root);
 
-    let maxCommits = 1;
-    for (const file of files) {
-      const c = commitStats.get(file.filePath)?.commitCount ?? 0;
-      if (c > maxCommits) maxCommits = c;
-    }
-
     this.normalizeChurn(root, maxCommits);
 
     // Compute hotspot ranking (files with high churn and high loc)
@@ -382,7 +378,7 @@ export class TreeAggregator {
           }
         }
       }
-      node.biomarkers = folderBiomarkers;
+      node.biomarkers = folderBiomarkers.length > 50 ? folderBiomarkers.slice(0, 50) : folderBiomarkers;
 
       // Populate aggregated contributors for folder/namespace
       const contributors: ContributorStat[] = [];
@@ -403,10 +399,10 @@ export class TreeAggregator {
       );
       node.contributors = contributors;
 
-      // Populate aggregated commits for folder/namespace
+      // Populate aggregated commits for folder/namespace (capped at 100 to keep snapshot serialization fast)
       const commits = Array.from(commitMap.values());
       commits.sort((a, b) => b.timestamp - a.timestamp);
-      node.commits = commits;
+      node.commits = commits.length > 100 ? commits.slice(0, 100) : commits;
     } else {
       node.value = node.loc;
     }

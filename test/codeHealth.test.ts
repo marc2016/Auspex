@@ -163,4 +163,66 @@ describe('CodeHealthAnalyzer', () => {
     const brainCls = result.biomarkers.find((b) => b.type === 'brain_class');
     expect(brainCls).toBeDefined();
   });
+
+  it('analyzes Python indentation correctly to detect deep nesting without curly braces', () => {
+    const lines = [
+      'def deep_python_fn(data):',
+      '    if data:',
+      '        for group in data.groups:',
+      '            if group.is_active:',
+      '                for item in group.items:',
+      '                    if item.value > 100:',
+      '                        print(item.value)',
+    ];
+
+    const methods: MethodInfo[] = [
+      { name: 'deep_python_fn', startLine: 1, endLine: 7, loc: 7 },
+    ];
+
+    const result = analyzer.analyzeFile(lines, methods, [], 'python');
+    const nested = result.biomarkers.find((b) => b.type === 'nested_complexity');
+    expect(nested).toBeDefined();
+    expect(nested?.functionName).toBe('deep_python_fn');
+  });
+
+  it('detects Excess Parameters when a method has 5 or more arguments', () => {
+    const lines = [
+      'function renderWidget(id: string, theme: string, width: number, height: number, animated: boolean, onClick: () => void) {',
+      '  return null;',
+      '}',
+    ];
+
+    const methods: MethodInfo[] = [
+      { name: 'renderWidget', startLine: 1, endLine: 3, loc: 3 },
+    ];
+
+    const result = analyzer.analyzeFile(lines, methods, [], 'typescript');
+    const excess = result.biomarkers.find((b) => b.type === 'excess_parameters');
+    expect(excess).toBeDefined();
+    expect(excess?.details).toContain('6 parameters');
+  });
+
+  it('analyzes top-level script logic when no functions are extracted in non-trivial files', () => {
+    // Generate a 60-line script without functions but with deep nesting and branches
+    const lines = [
+      '// Top-level automation script',
+      'if (process.env.RUN) {',
+      '  for (let i = 0; i < 10; i++) {',
+      '    if (i % 2 === 0) {',
+      '      while (true) {',
+      '        doSomething();',
+      '        break;',
+      '      }',
+      '    }',
+      '  }',
+      '}',
+      ...Array(50).fill('console.log("running");'),
+    ];
+
+    const result = analyzer.analyzeFile(lines, [], [], 'javascript');
+    expect(result.score).toBeLessThan(10.0);
+    const finding = result.biomarkers.find((b) => b.functionName === 'Top-Level Script');
+    expect(finding).toBeDefined();
+  });
 });
+

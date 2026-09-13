@@ -176,4 +176,26 @@ describe('GitChurnAnalyzer', () => {
     expect(isBugfixMessage('refactor: simplify reducer code')).toBe(false);
     expect(isBugfixMessage('docs: update readme')).toBe(false);
   });
+
+  it('handles tab-delimited paths with spaces and multiple line segments correctly', () => {
+    const statsMap = new Map<string, FileCommitStat>();
+    const rawLog = [
+      'COMMIT:sha1|1700000000|Dev|feat: update spaced file',
+      '12\t4\tsrc/components/My Spaced Component.tsx',
+      '0\t0\tsrc/empty.ts',
+      'invalid line without tabs',
+    ].join('\n');
+
+    analyzer.parseLogOutput(rawLog, statsMap);
+
+    const spacedStats = statsMap.get('src/components/My Spaced Component.tsx');
+    expect(spacedStats).toBeDefined();
+    expect(spacedStats?.linesAdded).toBe(12);
+    expect(spacedStats?.linesDeleted).toBe(4);
+
+    const emptyStats = statsMap.get('src/empty.ts');
+    expect(emptyStats).toBeDefined();
+    expect(emptyStats?.commitCount).toBe(1);
+  });
 });
+

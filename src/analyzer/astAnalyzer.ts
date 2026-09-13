@@ -21,6 +21,15 @@ export const DEFAULT_IGNORE_PATTERNS = [
   'target',
   '.idea',
   '.vscode',
+  'vendor',
+  '.venv',
+  'venv',
+  'env',
+  'site-packages',
+  '.cache',
+  '.turbo',
+  'bower_components',
+  'Pods',
   'package-lock.json',
   'yarn.lock',
   'pnpm-lock.yaml',
@@ -61,6 +70,8 @@ const CODE_EXTENSIONS: Record<string, string> = {
   '.hpp': 'cpp',
 };
 
+const wildcardRegexCache = new Map<string, RegExp | null>();
+
 export function isPathIgnored(name: string, relPath: string, patterns: string[]): boolean {
   const normalizedRel = relPath.replace(/\\/g, '/');
   const lowerName = name.toLowerCase();
@@ -76,16 +87,21 @@ export function isPathIgnored(name: string, relPath: string, patterns: string[])
     if (p.startsWith('*.')) {
       const ext = p.slice(1);
       if (lowerName.endsWith(ext)) return true;
+      continue; // Handled extension pattern, avoid regex compilation
     }
 
     if (p.includes('*')) {
-      const regexStr = '^' + p.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$';
-      try {
-        const reg = new RegExp(regexStr);
-        if (reg.test(lowerName) || reg.test(lowerRel)) return true;
-      } catch {
-        /* ignore */
+      let reg = wildcardRegexCache.get(p);
+      if (reg === undefined) {
+        try {
+          const regexStr = '^' + p.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$';
+          reg = new RegExp(regexStr);
+        } catch {
+          reg = null;
+        }
+        wildcardRegexCache.set(p, reg);
       }
+      if (reg && (reg.test(lowerName) || reg.test(lowerRel))) return true;
     }
   }
 
@@ -127,10 +143,8 @@ export class AstStructureAnalyzer {
   }
 
   analyzeFile(absolutePath: string, relPath: string): ParsedFileInfo {
-    let content = '';
     let stat: fs.Stats | undefined;
     try {
-      content = fs.readFileSync(absolutePath, 'utf-8');
       stat = fs.statSync(absolutePath);
     } catch {
       return {
@@ -144,14 +158,26 @@ export class AstStructureAnalyzer {
       };
     }
 
-    const fileHash = crypto.createHash('sha256').update(content).digest('hex');
-    const ext = path.extname(absolutePath).toLowerCase();
-    const lines = content.split('\n');
-    const loc = lines.length;
     const lastModifiedAt = stat ? stat.mtimeMs : Date.now();
-
+    const ext = path.extname(absolutePath).toLowerCase();
     const lang = CODE_EXTENSIONS[ext];
+
+    // Fast-path: non-code files (docs, configs) don't need AST or biomarker extraction
     if (!lang) {
+      let loc = 0;
+      let fileHash = '';
+      try {
+        const buf = fs.readFileSync(absolutePath);
+        if (buf.length > 0) {
+          loc = 1;
+          for (let i = 0; i < buf.length; i++) {
+            if (buf[i] === 10) loc++;
+          }
+        }
+        fileHash = crypto.createHash('sha256').update(buf).digest('hex');
+      } catch {
+        loc = 0;
+      }
       return {
         filePath: relPath,
         loc,
@@ -163,6 +189,45 @@ export class AstStructureAnalyzer {
         biomarkers: [],
       };
     }
+
+    // Large file guardrail (> 2MB): skip full AST extraction
+    if (stat && stat.size > 2 * 1024 * 1024) {
+      return {
+        filePath: relPath,
+        loc: Math.round(stat.size / 40),
+        classes: [],
+        methods: [],
+        fileHash: '',
+        lastModifiedAt,
+        codeHealth: 5.0,
+        biomarkers: [
+          {
+            type: 'brain_class',
+            severity: 'high',
+            details: `Oversized file (${(stat.size / (1024 * 1024)).toFixed(1)}MB). AST parsing skipped for performance.`,
+          },
+        ],
+      };
+    }
+
+    let content = '';
+    try {
+      content = fs.readFileSync(absolutePath, 'utf-8');
+    } catch {
+      return {
+        filePath: relPath,
+        loc: 0,
+        classes: [],
+        methods: [],
+        fileHash: '',
+        codeHealth: 10.0,
+        biomarkers: [],
+      };
+    }
+
+    const fileHash = crypto.createHash('sha256').update(content).digest('hex');
+    const lines = content.split('\n');
+    const loc = lines.length;
 
     const { namespace, classes, methods } = this.extractStructure(lines, lang);
     const healthResult = this.codeHealthAnalyzer.analyzeFile(lines, methods, classes, lang);
@@ -354,6 +419,11 @@ export class AstStructureAnalyzer {
           loc: Math.max(endLine - startLine + 1, 1),
           methods: [],
         });
+      }
+
+      // Fast filter: functions always require either '(' or '=>'
+      if (!line.includes('(') && !line.includes('=>')) {
+        continue;
       }
 
       let funcName: string | null = null;

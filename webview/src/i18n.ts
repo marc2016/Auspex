@@ -147,6 +147,7 @@ export const WEBVIEW_STRINGS = {
       networkGraphDesc: 'Knoten stellen Dateien dar, Kanten gemeinsame Commits. Klicke auf Knoten zum Auswählen oder ziehe sie.',
       nodesCount: 'Dateien',
       linksCount: 'Kopplungen',
+      fitView: 'Auf Ansicht einpassen',
     },
     tooltip: {
       loc: 'Zeilen',
@@ -299,6 +300,7 @@ export const WEBVIEW_STRINGS = {
       networkGraphDesc: 'Nodes represent files, links represent shared commits. Click a node to inspect or drag to reposition.',
       nodesCount: 'Files',
       linksCount: 'Couplings',
+      fitView: 'Fit to View',
     },
     tooltip: {
       loc: 'Lines',

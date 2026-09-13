@@ -150,6 +150,11 @@
           ],
           "description": "Files and patterns to ignore during Auspex workspace analysis."
         },
+        "auspex.maxCommits": {
+          "type": "number",
+          "default": 15000,
+          "description": "Maximum number of recent Git commits to analyze for hotspots and temporal coupling (set to 0 for unlimited). Speeds up analysis in large repositories."
+        },
         "auspex.jira.enabled": {
           "type": "boolean",
           "default": false,

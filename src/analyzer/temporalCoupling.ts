@@ -35,11 +35,31 @@ export class TemporalCouplingAnalyzer {
    * Records files modified in a single commit.
    */
   public recordCommitFiles(files: string[]): void {
-    const uniqueFiles = Array.from(new Set(files.map((f) => f.trim().replace(/\\/g, '/')).filter(Boolean)));
+    if (files.length === 0) return;
+
+    // Fast deduplication & normalization
+    let uniqueFiles: string[];
+    if (files.length === 1) {
+      const f = files[0].trim().replace(/\\/g, '/');
+      if (!f) return;
+      uniqueFiles = [f];
+    } else {
+      const seen = new Set<string>();
+      uniqueFiles = [];
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i].trim().replace(/\\/g, '/');
+        if (f && !seen.has(f)) {
+          seen.add(f);
+          uniqueFiles.push(f);
+        }
+      }
+    }
+
     if (uniqueFiles.length === 0) return;
 
     // Track commit count per file
-    for (const file of uniqueFiles) {
+    for (let i = 0; i < uniqueFiles.length; i++) {
+      const file = uniqueFiles[i];
       this.fileCommitsCount.set(file, (this.fileCommitsCount.get(file) ?? 0) + 1);
     }
 
@@ -48,12 +68,14 @@ export class TemporalCouplingAnalyzer {
       return;
     }
 
-    // Record all file pairs (fileA < fileB)
+    // Pre-sort once alphabetically so uniqueFiles[i] is guaranteed < uniqueFiles[j]
+    uniqueFiles.sort();
+
+    // Record all file pairs (fileA < fileB guaranteed)
     for (let i = 0; i < uniqueFiles.length; i++) {
+      const fileA = uniqueFiles[i];
       for (let j = i + 1; j < uniqueFiles.length; j++) {
-        const fileA = uniqueFiles[i] < uniqueFiles[j] ? uniqueFiles[i] : uniqueFiles[j];
-        const fileB = uniqueFiles[i] < uniqueFiles[j] ? uniqueFiles[j] : uniqueFiles[i];
-        const pairKey = `${fileA}|||${fileB}`;
+        const pairKey = `${fileA}|||${uniqueFiles[j]}`;
         this.pairCoChanges.set(pairKey, (this.pairCoChanges.get(pairKey) ?? 0) + 1);
       }
     }

@@ -374,6 +374,7 @@ async function runScan(
         }
       }
 
+      const maxCommits = config.get<number>('maxCommits', 15000);
       const snapshot = await pipeline.run(
         workspacePath,
         storage,
@@ -389,7 +390,8 @@ async function runScan(
         },
         ignorePatterns,
         jiraClient,
-        allowedProjectKeys
+        allowedProjectKeys,
+        { maxCommits }
       );
 
       latestSnapshot = snapshot;

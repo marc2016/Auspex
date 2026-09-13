@@ -159,13 +159,20 @@ export class CodeHealthAnalyzer {
       }
 
       if (isPython) {
-        const indentMatch = line.match(/^\s*/);
-        const indent = indentMatch ? indentMatch[0].length : 0;
+        let indent = 0;
+        while (indent < line.length && (line.charCodeAt(indent) === 32 || line.charCodeAt(indent) === 9)) {
+          indent++;
+        }
         currentNesting = Math.max(0, Math.floor((indent - baseIndent) / 4));
       } else {
-        // Brace languages: count { and }
-        const openBraces = (line.match(/\{/g) || []).length;
-        const closeBraces = (line.match(/\}/g) || []).length;
+        // Brace languages: count { and } without regex allocation
+        let openBraces = 0;
+        let closeBraces = 0;
+        for (let c = 0; c < line.length; c++) {
+          const ch = line.charCodeAt(c);
+          if (ch === 123) openBraces++;       // '{'
+          else if (ch === 125) closeBraces++; // '}'
+        }
         currentNesting = Math.max(0, currentNesting + openBraces - closeBraces);
       }
 
@@ -177,13 +184,25 @@ export class CodeHealthAnalyzer {
       // Branching statements for cyclomatic complexity
       if (
         /\b(if|else\s+if|elif|for|while|switch|case|catch)\b/.test(trimmed) ||
-        /\?\s*[^:]+\s*:/.test(trimmed) // ternary
+        (trimmed.includes('?') && /\?\s*[^:]+\s*:/.test(trimmed)) // quick ternary pre-check
       ) {
         cyclomaticComplexity++;
       }
 
-      // Complex conditionals (3+ operators or chained && / ||)
-      const opCount = (trimmed.match(/(&&|\|\|)/g) || []).length;
+      // Complex conditionals (3+ operators or chained && / ||) without regex allocation
+      let opCount = 0;
+      if (trimmed.includes('&') || trimmed.includes('|')) {
+        for (let c = 0; c < trimmed.length - 1; c++) {
+          const code = trimmed.charCodeAt(c);
+          if (
+            (code === 38 && trimmed.charCodeAt(c + 1) === 38) ||
+            (code === 124 && trimmed.charCodeAt(c + 1) === 124)
+          ) {
+            opCount++;
+            c++;
+          }
+        }
+      }
       if (opCount >= 2) {
         complexConditionalsCount++;
       }
