@@ -26,7 +26,7 @@ export class AuspexPipeline {
     customIgnorePatterns?: string[],
     jiraClient?: JiraClient | null,
     allowedProjectKeys?: string[],
-    options?: { maxCommits?: number }
+    options?: { maxCommits?: number; authorAliases?: Record<string, string[]> }
   ): Promise<AnalysisSnapshot> {
     const startTime = Date.now();
 
@@ -51,6 +51,7 @@ export class AuspexPipeline {
 
     const commitStats = await this.churnAnalyzer.analyze(workspacePath, {
       maxCommits: options?.maxCommits,
+      authorAliases: options?.authorAliases,
     });
 
     // Optional Jira ticket enrichment
@@ -194,6 +195,10 @@ export class AuspexPipeline {
         this.churnAnalyzer.lastProjectCouplings
       );
 
+    if (knowledgeSummary) {
+      knowledgeSummary.detectedAuthors = this.churnAnalyzer.lastDetectedAuthors;
+    }
+
     const totalLoc = parsedFiles.reduce((sum, f) => sum + f.loc, 0);
     const durationMs = Date.now() - startTime;
 
@@ -210,6 +215,7 @@ export class AuspexPipeline {
       projectCouplings,
       couplingGraph,
       knowledgeSummary,
+      authorAliases: options?.authorAliases,
     };
 
     if (storage) {

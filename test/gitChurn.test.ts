@@ -197,5 +197,53 @@ describe('GitChurnAnalyzer', () => {
     expect(emptyStats).toBeDefined();
     expect(emptyStats?.commitCount).toBe(1);
   });
+
+  it('consolidates commits from multiple aliases into a single canonical author', () => {
+    const statsMap = new Map<string, FileCommitStat>();
+
+    const rawLog = [
+      'COMMIT:sha1|1700000000|marc2016|feat: init feature',
+      '20\t5\tsrc/feature.ts',
+      'COMMIT:sha2|1700010000|Marc|fix: adjust logic',
+      '10\t2\tsrc/feature.ts',
+      'COMMIT:sha3|1700020000|mlammers|refactor: clean up',
+      '5\t3\tsrc/feature.ts',
+      'COMMIT:sha4|1700030000|OtherDev|docs: update docs',
+      '2\t0\tsrc/feature.ts',
+    ].join('\n');
+
+    const aliases: Record<string, string[]> = {
+      'Marc Lammers': ['marc2016', 'Marc', 'mlammers'],
+    };
+
+    analyzer.parseLogOutput(rawLog, statsMap, aliases);
+
+    const featureStats = statsMap.get('src/feature.ts');
+    expect(featureStats).toBeDefined();
+    expect(featureStats?.commitCount).toBe(4);
+
+    // Contributors should merge the 3 aliases under 'Marc Lammers'
+    const contributors = featureStats?.contributors || [];
+    expect(contributors.length).toBe(2);
+
+    const marc = contributors.find((c) => c.name === 'Marc Lammers');
+    expect(marc).toBeDefined();
+    expect(marc?.commits).toBe(3);
+    expect(marc?.linesAdded).toBe(35); // 20 + 10 + 5
+    expect(marc?.linesDeleted).toBe(10); // 5 + 2 + 3
+    expect(marc?.percentage).toBe(75.0); // 3 of 4 commits = 75%
+
+    const other = contributors.find((c) => c.name === 'OtherDev');
+    expect(other).toBeDefined();
+    expect(other?.commits).toBe(1);
+    expect(other?.percentage).toBe(25.0);
+
+    // Verify detected authors contains all raw distinct authors
+    expect(analyzer.lastDetectedAuthors).toContain('marc2016');
+    expect(analyzer.lastDetectedAuthors).toContain('Marc');
+    expect(analyzer.lastDetectedAuthors).toContain('mlammers');
+    expect(analyzer.lastDetectedAuthors).toContain('OtherDev');
+  });
 });
+
 

@@ -77,6 +77,10 @@ export const EXT_STRINGS = {
       coupling: 'Auspex Kopplung',
       knowledge: 'Auspex Monopolwissen',
     },
+    authorAliasesSaved: (count: number) =>
+      `Auspex: ${count} Autoren-Aliase erfolgreich gespeichert. Analyse wird aktualisiert…`,
+    authorAliasesSaveError: (err: string) =>
+      `Auspex: Fehler beim Speichern der Autoren-Aliase: ${err}`,
   },
   en: {
     editorHealthEnabled: 'Auspex: Code Health in Editor enabled.',
@@ -144,5 +148,9 @@ export const EXT_STRINGS = {
       coupling: 'Auspex Coupling',
       knowledge: 'Auspex Knowledge Monopolies',
     },
+    authorAliasesSaved: (count: number) =>
+      `Auspex: Successfully saved ${count} author aliases. Refreshing analysis…`,
+    authorAliasesSaveError: (err: string) =>
+      `Auspex: Failed to save author aliases: ${err}`,
   },
 };

@@ -184,7 +184,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
   knowledgeViewProvider = new AuspexKnowledgeViewProvider(
     context.extensionUri,
-    workspacePath
+    workspacePath,
+    () => runScan(context, workspacePath, true)
   );
 
   context.subscriptions.push(
@@ -503,6 +504,7 @@ async function runScan(
       }
 
       const maxCommits = config.get<number>('maxCommits', 15000);
+      const authorAliases = config.get<Record<string, string[]>>('authorAliases', {});
       const snapshot = await pipeline.run(
         workspacePath,
         storage,
@@ -519,7 +521,7 @@ async function runScan(
         ignorePatterns,
         jiraClient,
         allowedProjectKeys,
-        { maxCommits }
+        { maxCommits, authorAliases }
       );
 
       rawSnapshot = snapshot;

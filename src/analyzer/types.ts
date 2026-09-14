@@ -192,6 +192,7 @@ export interface KnowledgeSummary {
   monopolyPercentage: number;
   topAuthors: KnowledgeAuthorStat[];
   highestRiskFiles: KnowledgeRiskItem[];
+  detectedAuthors?: string[];
 }
 
 export interface HotspotItem {
@@ -218,6 +219,7 @@ export interface AnalysisSnapshot {
   projectCouplings?: ProjectCouplingPair[];
   couplingGraph?: CouplingGraphData;
   knowledgeSummary?: KnowledgeSummary;
+  authorAliases?: Record<string, string[]>;
   scope?: AuspexScope;
   scopeSummary?: string;
 }

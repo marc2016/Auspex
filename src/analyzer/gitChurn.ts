@@ -17,6 +17,7 @@ export function isBugfixMessage(message: string): boolean {
 
 export class GitChurnAnalyzer {
   public lastProjectCouplings: ProjectCouplingPair[] = [];
+  public lastDetectedAuthors: string[] = [];
 
   /**
    * Runs git log with numstat to extract commit counts, churn lines, and author activity.
@@ -24,7 +25,7 @@ export class GitChurnAnalyzer {
    */
   async analyze(
     workspacePath: string,
-    options?: { maxCommits?: number }
+    options?: { maxCommits?: number; authorAliases?: Record<string, string[]> }
   ): Promise<Map<string, FileCommitStat>> {
     const statsMap = new Map<string, FileCommitStat>();
 
@@ -37,8 +38,9 @@ export class GitChurnAnalyzer {
 
       const args = [
         'log',
+        '--use-mailmap',
         '--numstat',
-        '--format=COMMIT:%H|%at|%an|%s',
+        '--format=COMMIT:%H|%at|%aN|%s',
         '--diff-filter=ACDMRT',
       ];
 
@@ -49,7 +51,7 @@ export class GitChurnAnalyzer {
 
       const logOutput = await git.raw(args);
 
-      this.parseLogOutput(logOutput, statsMap);
+      this.parseLogOutput(logOutput, statsMap, options?.authorAliases);
     } catch (err) {
       console.warn('[Auspex] Git churn analysis skipped/failed:', err);
     }
@@ -60,8 +62,31 @@ export class GitChurnAnalyzer {
   /**
    * Parses git log --numstat output into semantic commit statistics.
    */
-  public parseLogOutput(logOutput: string, statsMap: Map<string, FileCommitStat>): void {
+  public parseLogOutput(
+    logOutput: string,
+    statsMap: Map<string, FileCommitStat>,
+    authorAliases?: Record<string, string[]>
+  ): void {
     const lines = logOutput.split('\n');
+
+    const aliasToCanonical = new Map<string, string>();
+    if (authorAliases) {
+      for (const [canonical, aliases] of Object.entries(authorAliases)) {
+        if (Array.isArray(aliases)) {
+          for (const alias of aliases) {
+            const trimmed = (alias || '').trim();
+            if (trimmed) {
+              aliasToCanonical.set(trimmed.toLowerCase(), canonical.trim());
+            }
+          }
+        }
+        if (canonical && canonical.trim()) {
+          aliasToCanonical.set(canonical.trim().toLowerCase(), canonical.trim());
+        }
+      }
+    }
+
+    const detectedAuthorsSet = new Set<string>();
 
     let currentCommitSha = '';
     let currentAuthor = 'Unknown';
@@ -98,13 +123,21 @@ export class GitChurnAnalyzer {
         const timestampSec = parseInt(parts[1], 10);
         currentTimestamp = !isNaN(timestampSec) ? timestampSec * 1000 : Date.now();
 
+        let rawAuthor = 'Unknown';
         if (parts.length >= 4) {
-          currentAuthor = parts[2] || 'Unknown';
+          rawAuthor = (parts[2] || 'Unknown').trim();
           currentMessage = parts.slice(3).join('|');
         } else {
-          currentAuthor = 'Unknown';
+          rawAuthor = (parts[2] || 'Unknown').trim();
           currentMessage = parts.slice(2).join('|');
         }
+
+        if (rawAuthor && rawAuthor !== 'Unknown') {
+          detectedAuthorsSet.add(rawAuthor);
+        }
+
+        const mappedAuthor = aliasToCanonical.get(rawAuthor.toLowerCase()) || rawAuthor;
+        currentAuthor = mappedAuthor || 'Unknown';
 
         const subject = currentMessage.toLowerCase();
 
@@ -268,6 +301,10 @@ export class GitChurnAnalyzer {
         stats.contributors = [];
       }
     }
+
+    this.lastDetectedAuthors = Array.from(detectedAuthorsSet).sort((a, b) =>
+      a.localeCompare(b)
+    );
   }
 
   private resolveRenamePath(filePath: string): string {

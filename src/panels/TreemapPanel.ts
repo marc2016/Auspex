@@ -5,6 +5,7 @@ import type { AnalysisSnapshot, PipelineProgress, TreeNode } from '../analyzer/t
 import { openFileInEditor } from '../utils/navigation';
 import { openCommitDiffInEditor } from '../utils/gitDiff';
 import { resolveLanguage } from '../i18n';
+import { saveAuthorAliases } from '../utils/authorAliases';
 
 export class TreemapPanel {
   public static currentPanel: TreemapPanel | undefined;
@@ -121,6 +122,14 @@ export class TreemapPanel {
             if (this._onRescanRequested) {
               await this._onRescanRequested();
             }
+            break;
+          case 'saveAuthorAliases':
+            await saveAuthorAliases(
+              this._workspacePath,
+              message.target,
+              message.aliases,
+              this._onRescanRequested
+            );
             break;
           case 'openExternal':
             if (message.url) {

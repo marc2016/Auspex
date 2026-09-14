@@ -176,6 +176,11 @@
           "default": 15000,
           "description": "Maximum number of recent Git commits to analyze for hotspots and temporal coupling (set to 0 for unlimited). Speeds up analysis in large repositories."
         },
+        "auspex.authorAliases": {
+          "type": "object",
+          "default": {},
+          "description": "Mapping of primary author names to lists of alias names or emails to consolidate Git statistics in Auspex (e.g. {\"Max Mustermann\": [\"max\", \"mmustermann\"]})."
+        },
         "auspex.jira.enabled": {
           "type": "boolean",
           "default": false,

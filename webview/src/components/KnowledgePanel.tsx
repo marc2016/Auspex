@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { TreeNode, AnalysisSnapshot, KnowledgeSummary, ContributorStat, KnowledgeRiskItem } from '../../../src/analyzer/types';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
 import { FileHeader } from './FileHeader';
+import { AuthorAliasModal } from './AuthorAliasModal';
+import { getVsCodeApi } from '../services/vscode';
 import {
   mdiAccountMultipleOutline,
   mdiAlertCircleOutline,
@@ -20,6 +22,7 @@ interface Props {
   onSelectNode?: (nodePath: string) => void;
   onClearSelection?: () => void;
   onShowInTreemap?: (filePath?: string) => void;
+  onSaveAuthorAliases?: (target: 'settings' | 'mailmap', aliases: Record<string, string[]>) => void;
 }
 
 const AUTHOR_PALETTE = [
@@ -69,7 +72,10 @@ export const KnowledgePanel: React.FC<Props> = ({
   onOpenFile,
   onSelectNode,
   onClearSelection,
+  onShowInTreemap,
+  onSaveAuthorAliases,
 }) => {
+  const [isAliasModalOpen, setIsAliasModalOpen] = useState(false);
   const t = WEBVIEW_STRINGS[language];
   const kStrings = t.knowledge;
 
@@ -492,9 +498,31 @@ export const KnowledgePanel: React.FC<Props> = ({
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-primary)' }}>
                   {kStrings.topAuthors}
                 </span>
-                <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
-                  {knowledgeSummary.totalAuthors} {kStrings.total}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>
+                    {knowledgeSummary.totalAuthors} {kStrings.total}
+                  </span>
+                  <button
+                    onClick={() => setIsAliasModalOpen(true)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '2px 6px',
+                      borderRadius: 4,
+                      border: '1px solid var(--border-color)',
+                      backgroundColor: 'var(--bg-card)',
+                      color: 'var(--text-primary)',
+                      fontSize: 10,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                    title={kStrings.manageAliases}
+                  >
+                    <Icon path={mdiAccountMultipleOutline} size={0.5} color="var(--accent-color)" />
+                    <span>{kStrings.manageAliases}</span>
+                  </button>
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -526,6 +554,21 @@ export const KnowledgePanel: React.FC<Props> = ({
                           <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-primary)' }}>
                             {author.name}
                           </span>
+                          <button
+                            onClick={() => setIsAliasModalOpen(true)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: 'var(--text-secondary)',
+                              cursor: 'pointer',
+                              padding: '0 2px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                            }}
+                            title={kStrings.aliasQuickAdd}
+                          >
+                            <Icon path={mdiAccountMultipleOutline} size={0.45} color="var(--text-secondary)" />
+                          </button>
                         </div>
                         <span style={{ fontSize: 10, fontWeight: 700, color }}>
                           {author.percentageOfCodebase}% {kStrings.codebaseShare}
@@ -671,6 +714,29 @@ export const KnowledgePanel: React.FC<Props> = ({
           </div>
         </div>
       )}
+
+      {/* Author Alias & Consolidation Modal */}
+      <AuthorAliasModal
+        isOpen={isAliasModalOpen}
+        onClose={() => setIsAliasModalOpen(false)}
+        detectedAuthors={
+          knowledgeSummary?.detectedAuthors ||
+          (knowledgeSummary?.topAuthors || []).map((a) => a.name)
+        }
+        initialAliases={snapshot?.authorAliases}
+        language={language}
+        onSave={(tgt, aliases) => {
+          if (onSaveAuthorAliases) {
+            onSaveAuthorAliases(tgt, aliases);
+          } else {
+            getVsCodeApi().postMessage({
+              type: 'saveAuthorAliases',
+              target: tgt,
+              aliases,
+            });
+          }
+        }}
+      />
     </div>
   );
 };

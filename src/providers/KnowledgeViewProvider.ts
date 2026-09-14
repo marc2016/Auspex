@@ -5,6 +5,7 @@ import type { TreeNode, AnalysisSnapshot } from '../analyzer/types';
 import { openFileInEditor } from '../utils/navigation';
 import { openCommitDiffInEditor } from '../utils/gitDiff';
 import { resolveLanguage, EXT_STRINGS } from '../i18n';
+import { saveAuthorAliases } from '../utils/authorAliases';
 
 export class AuspexKnowledgeViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'auspex.knowledgeView';
@@ -12,12 +13,18 @@ export class AuspexKnowledgeViewProvider implements vscode.WebviewViewProvider {
   private _view?: vscode.WebviewView;
   private readonly _extensionUri: vscode.Uri;
   private readonly _workspacePath: string;
+  private readonly _onRescanRequested?: () => Promise<void>;
   private _selectedNode: TreeNode | null = null;
   private _currentSnapshot: AnalysisSnapshot | null = null;
 
-  constructor(extensionUri: vscode.Uri, workspacePath: string) {
+  constructor(
+    extensionUri: vscode.Uri,
+    workspacePath: string,
+    onRescanRequested?: () => Promise<void>
+  ) {
     this._extensionUri = extensionUri;
     this._workspacePath = workspacePath;
+    this._onRescanRequested = onRescanRequested;
   }
 
   public get selectedNode(): TreeNode | null {
@@ -111,6 +118,14 @@ export class AuspexKnowledgeViewProvider implements vscode.WebviewViewProvider {
               /* ignore */
             }
           }
+          break;
+        case 'saveAuthorAliases':
+          await saveAuthorAliases(
+            this._workspacePath,
+            message.target,
+            message.aliases,
+            this._onRescanRequested
+          );
           break;
       }
     });
