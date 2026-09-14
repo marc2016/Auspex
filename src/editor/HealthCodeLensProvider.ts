@@ -70,8 +70,8 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
       const biomarkers = m.biomarkers || [];
 
       const icon = score >= 9.0 ? '$(heart)' : score >= 6.0 ? '$(warning)' : '$(error)';
-      const bioInfo = biomarkers.length > 0 ? ` (${biomarkers.length} Biomarker)` : '';
-      const title = `${icon}   Health: ${score.toFixed(1)}/10${bioInfo}`;
+      const bioInfo = biomarkers.length > 0 ? `\u00A0\u00A0(${biomarkers.length} Biomarker)` : '';
+      const title = `${icon}\u00A0\u00A0Health:\u00A0${score.toFixed(1)}/10${bioInfo}`;
 
       const range = new vscode.Range(startLine - 1, 0, startLine - 1, 0);
       lenses.push(

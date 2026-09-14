@@ -128,7 +128,7 @@ export class EditorHealthDecorator implements vscode.Disposable {
       const statusIcon = isHealthy ? '$(heart)' : isProblematic ? '$(warning)' : '$(error)';
       const md = new vscode.MarkdownString();
       md.isTrusted = true;
-      md.appendMarkdown(`### ${statusIcon}   Auspex Code Health: **${score.toFixed(1)} / 10.0** (${statusLabel})\n\n`);
+      md.appendMarkdown(`### ${statusIcon}&nbsp;&nbsp;Auspex Code Health: **${score.toFixed(1)} / 10.0** (${statusLabel})\n\n`);
       md.appendMarkdown(`**${isDe ? 'Funktion' : 'Function'}:** \`${m.name}()\`\n\n`);
       md.appendMarkdown(`*${m.loc} LOC (Z. ${m.startLine}–${m.endLine})*\n\n`);
 
@@ -137,7 +137,7 @@ export class EditorHealthDecorator implements vscode.Disposable {
         for (const b of biomarkers) {
           const typeName = BIOMARKER_NAMES[b.type]?.[lang] || b.type;
           const icon = b.severity === 'high' ? '$(error)' : b.severity === 'medium' ? '$(warning)' : '$(info)';
-          md.appendMarkdown(`- ${icon}   **${typeName}**: ${b.details}\n`);
+          md.appendMarkdown(`- ${icon}&nbsp;&nbsp;**${typeName}**: ${b.details}\n`);
         }
       } else {
         md.appendMarkdown(`---\n\n*${isDe ? 'Keine Code-Biomarker erkannt (Sehr sauberer Code).' : 'No code biomarkers detected (Clean code).'}*\n`);
@@ -168,7 +168,7 @@ export class EditorHealthDecorator implements vscode.Disposable {
 
         const md = new vscode.MarkdownString();
         md.isTrusted = true;
-        md.appendMarkdown(`### ${icon}   Auspex Biomarker: **${typeName}**\n\n`);
+        md.appendMarkdown(`### ${icon}&nbsp;&nbsp;Auspex Biomarker: **${typeName}**\n\n`);
         md.appendMarkdown(`${b.details}\n`);
 
         const decoration: vscode.DecorationOptions = {
