@@ -14,7 +14,8 @@ import { resolveLanguage, EXT_STRINGS } from './i18n';
 import { openFileInEditor } from './utils/navigation';
 import { AuspexGitContentProvider, AUSPEX_GIT_SCHEME } from './utils/gitDiff';
 import { findFileNode } from './utils/treeLookup';
-import type { AnalysisSnapshot, TreeNode } from './analyzer/types';
+import { filterSnapshotByScope } from './analyzer/scopeFilter';
+import type { AnalysisSnapshot, TreeNode, AuspexScope } from './analyzer/types';
 import { JiraConfigManager } from './integrations/jira/jiraConfigManager';
 import { JiraClient } from './integrations/jira/jiraClient';
 
@@ -28,10 +29,13 @@ let healthViewProvider: AuspexHealthViewProvider;
 let couplingViewProvider: AuspexCouplingViewProvider;
 let knowledgeViewProvider: AuspexKnowledgeViewProvider;
 let statusBarItem: vscode.StatusBarItem;
+let rawSnapshot: AnalysisSnapshot | null = null;
+let currentScope: AuspexScope = { mode: 'all' };
 let latestSnapshot: AnalysisSnapshot | null = null;
 let latestSelectedNode: TreeNode | null = null;
 let updateDetailsForEditor: (editor: vscode.TextEditor | undefined) => void;
 let setSelectedNodeAcrossProviders: (node: TreeNode | null, reveal?: boolean) => void;
+let applyCurrentScopeAndDistribute: (scope?: AuspexScope) => Promise<void>;
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('[Auspex] Extension is activating…');
@@ -54,9 +58,11 @@ export async function activate(context: vscode.ExtensionContext) {
   // Restore cached snapshot if available (must have valid codeHealth)
   const cachedSnapshot = storage.loadSnapshot();
   if (cachedSnapshot && typeof cachedSnapshot.tree?.codeHealth === 'number') {
+    rawSnapshot = cachedSnapshot;
     latestSnapshot = cachedSnapshot;
   } else {
     console.log('[Auspex] Cached snapshot lacks Code Health data. Invalidation triggered for fresh scan.');
+    rawSnapshot = null;
     latestSnapshot = null;
   }
 
@@ -70,11 +76,42 @@ export async function activate(context: vscode.ExtensionContext) {
   statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 
+  applyCurrentScopeAndDistribute = async (scope?: AuspexScope) => {
+    if (scope) {
+      currentScope = scope;
+    }
+    if (!rawSnapshot) return;
+
+    try {
+      const scoped = await filterSnapshotByScope(rawSnapshot, currentScope, workspacePath);
+      latestSnapshot = scoped;
+
+      overviewProvider.updateSnapshot(scoped, currentScope);
+      sidebarProvider.updateSnapshot(scoped);
+      detailsViewProvider.updateSnapshot(scoped);
+      healthViewProvider.updateSnapshot(scoped);
+      couplingViewProvider.updateSnapshot(scoped);
+      knowledgeViewProvider.updateSnapshot(scoped);
+      if (TreemapPanel.currentPanel) {
+        TreemapPanel.currentPanel.sendSnapshot(scoped);
+      }
+      if (updateDetailsForEditor) {
+        updateDetailsForEditor(vscode.window.activeTextEditor);
+      }
+      updateStatusBar();
+    } catch (err) {
+      console.error('[Auspex] Failed to apply scope filter:', err);
+    }
+  };
+
   // 2. Setup Sidebar Providers
   overviewProvider = new AuspexOverviewProvider(
     () => openTreemap(context, workspacePath),
     () => runScan(context, workspacePath, true),
-    () => openHelp(context, workspacePath)
+    () => openHelp(context, workspacePath),
+    async (scope) => {
+      await applyCurrentScopeAndDistribute(scope);
+    }
   );
 
   context.subscriptions.push(
@@ -147,13 +184,8 @@ export async function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  if (latestSnapshot) {
-    overviewProvider.updateSnapshot(latestSnapshot);
-    sidebarProvider.updateSnapshot(latestSnapshot);
-    detailsViewProvider.updateSnapshot(latestSnapshot);
-    healthViewProvider.updateSnapshot(latestSnapshot);
-    couplingViewProvider.updateSnapshot(latestSnapshot);
-    knowledgeViewProvider.updateSnapshot(latestSnapshot);
+  if (rawSnapshot) {
+    applyCurrentScopeAndDistribute();
   }
 
   // 3. Register Commands
@@ -413,21 +445,8 @@ async function runScan(
         { maxCommits }
       );
 
-      latestSnapshot = snapshot;
-      overviewProvider.updateSnapshot(snapshot);
-      sidebarProvider.updateSnapshot(snapshot);
-      detailsViewProvider.updateSnapshot(snapshot);
-      healthViewProvider.updateSnapshot(snapshot);
-      couplingViewProvider.updateSnapshot(snapshot);
-      knowledgeViewProvider.updateSnapshot(snapshot);
-      if (TreemapPanel.currentPanel) {
-        TreemapPanel.currentPanel.sendSnapshot(snapshot);
-      }
-      if (updateDetailsForEditor) {
-        updateDetailsForEditor(vscode.window.activeTextEditor);
-      }
-
-      updateStatusBar();
+      rawSnapshot = snapshot;
+      await applyCurrentScopeAndDistribute();
 
       if (interactive) {
         vscode.window.showInformationMessage(
@@ -461,7 +480,13 @@ function updateStatusBar() {
 
   if (latestSnapshot) {
     const hotspotCount = latestSnapshot.hotspots.length;
-    statusBarItem.text = `$(graph) Auspex: ${latestSnapshot.totalLoc.toLocaleString(lang === 'de' ? 'de-DE' : 'en-US')} LOC ($(flame) ${hotspotCount})`;
+    const scopeTag =
+      latestSnapshot.scope?.mode === 'worktree'
+        ? ' [Worktree]'
+        : latestSnapshot.scope?.mode === 'timeframe'
+        ? ' [Zeit]'
+        : '';
+    statusBarItem.text = `$(graph) Auspex${scopeTag}: ${latestSnapshot.totalLoc.toLocaleString(lang === 'de' ? 'de-DE' : 'en-US')} LOC ($(flame) ${hotspotCount})`;
     statusBarItem.tooltip = t.statusBarTooltip(latestSnapshot.totalFiles);
   } else {
     statusBarItem.text = '$(graph) Auspex';

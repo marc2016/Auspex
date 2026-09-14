@@ -217,6 +217,19 @@ export interface AnalysisSnapshot {
   projectCouplings?: ProjectCouplingPair[];
   couplingGraph?: CouplingGraphData;
   knowledgeSummary?: KnowledgeSummary;
+  scope?: AuspexScope;
+  scopeSummary?: string;
+}
+
+export type ScopeMode = 'all' | 'worktree' | 'timeframe';
+
+export type TimeframePreset = '7d' | '14d' | '30d' | '90d' | '180d' | '1y' | 'custom';
+
+export interface AuspexScope {
+  mode: ScopeMode;
+  timeframePreset?: TimeframePreset;
+  startDate?: string; // YYYY-MM-DD
+  endDate?: string;   // YYYY-MM-DD
 }
 
 export interface PipelineProgress {
@@ -226,3 +239,4 @@ export interface PipelineProgress {
   processedFiles?: number;
   totalFiles?: number;
 }
+
