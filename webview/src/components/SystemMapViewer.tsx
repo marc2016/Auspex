@@ -13,6 +13,12 @@ import {
   getKnowledgeColor,
   renderTooltipHtml,
 } from './TreemapViewer';
+import {
+  compactTree,
+  shouldShowFolderLabel,
+  truncateLabel,
+  type CompactedTreeNode,
+} from '../utils/systemMapUtils';
 
 interface Props {
   tree: TreeNode;
@@ -98,26 +104,31 @@ export const SystemMapViewer: React.FC<Props> = ({
       document.body.classList.contains('vscode-light') ||
       document.body.classList.contains('vscode-high-contrast-light');
 
-    const folderFill = isLight ? 'rgba(0, 0, 0, 0.03)' : 'rgba(255, 255, 255, 0.05)';
-    const folderStroke = isLight ? 'rgba(0, 0, 0, 0.16)' : 'rgba(255, 255, 255, 0.15)';
+    const folderFill = isLight ? 'rgba(0, 0, 0, 0.025)' : 'rgba(255, 255, 255, 0.04)';
+    const folderStrokePrimary = isLight ? 'rgba(0, 0, 0, 0.18)' : 'rgba(255, 255, 255, 0.18)';
+    const folderStrokeSubtle = isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)';
     const textColor = isLight ? '#334155' : '#cbd5e1';
+    const fileTextColor = isLight ? '#0f172a' : '#f8fafc';
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
+    // Compact single-child folder chains (e.g. webview -> src -> components)
+    const compactedTree = compactTree(tree);
+
     // Setup D3 Circle Packing hierarchy
-    const pack = (data: TreeNode) =>
+    const pack = (data: CompactedTreeNode) =>
       d3
-        .pack<TreeNode>()
+        .pack<CompactedTreeNode>()
         .size([width, height])
-        .padding((d) => (d.depth === 1 ? 16 : 4))(
+        .padding((d) => (d.depth === 1 ? 16 : 5))(
         d3
           .hierarchy(data)
           .sum((d) => (d.children?.length ? 0 : Math.max(d.loc || 1, 1)))
           .sort((a, b) => (b.value || 0) - (a.value || 0))
       );
 
-    const root = pack(tree);
+    const root = pack(compactedTree);
 
     // Zoomable group
     const g = svg.append('g').attr('class', 'zoomable-container');
@@ -164,10 +175,21 @@ export const SystemMapViewer: React.FC<Props> = ({
         return getNodeColor(d.data, isLight);
       })
       .attr('stroke', (d) => {
-        if (d.children) return folderStroke;
-        return isLight ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.4)';
+        if (d.children) {
+          return d.depth === 1 ? folderStrokePrimary : folderStrokeSubtle;
+        }
+        return isLight ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.45)';
       })
-      .attr('stroke-width', (d) => (d.children ? 1.5 : 0.8))
+      .attr('stroke-width', (d) => {
+        if (d.children) {
+          return d.depth === 1 ? 1.5 : 0.8;
+        }
+        return 0.8;
+      })
+      .attr('stroke-dasharray', (d) => {
+        if (d.children && d.depth > 1) return '3,2';
+        return null;
+      })
       .attr('cursor', 'pointer')
       .style('transition', 'filter 0.15s ease')
       .on('mouseenter', function (this: SVGCircleElement, event: MouseEvent, d: any) {
@@ -198,7 +220,7 @@ export const SystemMapViewer: React.FC<Props> = ({
         }
       });
 
-    // Target ring around selected file
+    // Target ring around selected file / folder
     const targetRing = g
       .append('circle')
       .attr('fill', 'none')
@@ -209,7 +231,11 @@ export const SystemMapViewer: React.FC<Props> = ({
       .style('pointer-events', 'none');
 
     if (selectedNode) {
-      const found = root.descendants().find((d) => d.data.path === selectedNode.path);
+      const found = root.descendants().find(
+        (d: any) =>
+          d.data.path === selectedNode.path ||
+          (d.data.compactedPaths && d.data.compactedPaths.includes(selectedNode.path))
+      );
       if (found) {
         targetRing
           .style('display', 'inline')
@@ -220,21 +246,81 @@ export const SystemMapViewer: React.FC<Props> = ({
     }
 
     // Folder label texts
-    const label = g
+    const folderLabels = g
       .append('g')
-      .attr('class', 'labels')
+      .attr('class', 'folder-labels')
       .attr('pointer-events', 'none')
       .attr('text-anchor', 'middle')
       .selectAll('text')
       .data(root.descendants().filter((d) => d.children && d.depth > 0))
       .join('text')
-      .attr('transform', (d: any) => `translate(${d.x},${d.y - d.r + 14})`)
       .style('fill', textColor)
       .style('font-style', 'italic')
-      .style('font-size', (d) => `${Math.max(10, Math.min(14, d.r / 5))}px`)
       .style('font-weight', '500')
+      .style('user-select', 'none');
+
+    // File label texts (visible on deep zoom)
+    const fileLabels = g
+      .append('g')
+      .attr('class', 'file-labels')
+      .attr('pointer-events', 'none')
+      .attr('text-anchor', 'middle')
+      .selectAll('text')
+      .data(root.descendants().filter((d) => !d.children))
+      .join('text')
+      .style('fill', fileTextColor)
+      .style('font-weight', '600')
+      .style('text-shadow', isLight ? '0 1px 2px rgba(255,255,255,0.85)' : '0 1px 2px rgba(0,0,0,0.85)')
       .style('user-select', 'none')
-      .text((d) => d.data.name);
+      .style('display', 'none');
+
+    const containerMinDim = Math.min(width, height);
+
+    // Update labels dynamic font scaling and semantic zoom visibility
+    function updateLabels(k: number) {
+      // Counter-scale target ring stroke
+      targetRing.attr('stroke-width', 2.5 / k);
+
+      // Folder labels
+      folderLabels
+        .attr('transform', (d: any) => `translate(${d.x},${d.y - d.r + 14 / k})`)
+        .style('font-size', (d: any) => {
+          const screenR = d.r * k;
+          const screenFontSize = Math.min(13, Math.max(10, screenR / 7));
+          return `${screenFontSize / k}px`;
+        })
+        .text((d: any) => {
+          const screenR = d.r * k;
+          const maxTextWidth = screenR * 1.8;
+          return truncateLabel(d.data.name, maxTextWidth, 6.5);
+        })
+        .style('display', (d: any) => {
+          const screenR = d.r * k;
+          const visible = shouldShowFolderLabel(d.depth, screenR, k, containerMinDim);
+          return visible ? 'inline' : 'none';
+        });
+
+      // File labels (appear when leaf circle is sufficiently large on screen)
+      fileLabels
+        .attr('transform', (d: any) => `translate(${d.x},${d.y + 3.5 / k})`)
+        .style('font-size', (d: any) => {
+          const screenR = d.r * k;
+          const screenFontSize = Math.min(11, Math.max(8.5, screenR / 3.2));
+          return `${screenFontSize / k}px`;
+        })
+        .text((d: any) => {
+          const screenR = d.r * k;
+          const maxTextWidth = screenR * 1.7;
+          return truncateLabel(d.data.name, maxTextWidth, 5.8);
+        })
+        .style('display', (d: any) => {
+          const screenR = d.r * k;
+          return screenR >= 22 ? 'inline' : 'none';
+        });
+    }
+
+    // Initial label layout at scale 1
+    updateLabels(1);
 
     // Zoom behavior with mouse wheel & drag support
     const zoomBehavior = d3
@@ -242,8 +328,7 @@ export const SystemMapViewer: React.FC<Props> = ({
       .scaleExtent([0.2, 25])
       .on('zoom', (event) => {
         g.attr('transform', event.transform);
-        const k = event.transform.k;
-        label.style('display', (d: any) => (d.r * k >= 18 ? 'inline' : 'none'));
+        updateLabels(event.transform.k);
       });
 
     zoomBehaviorRef.current = zoomBehavior;
