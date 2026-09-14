@@ -281,6 +281,7 @@ export const App: React.FC = () => {
         {selectedNode ? (
           <TreemapDetailsPanel
             node={selectedNode}
+            totalLoc={snapshot?.totalLoc ?? snapshot?.tree?.loc}
             onClose={() => {
               setSelectedNode(null);
               vscode.postMessage({ type: 'clearSelection' });

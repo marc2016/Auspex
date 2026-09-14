@@ -233,7 +233,12 @@ export function prepareHierarchy(node: TreeNode): TreeNode {
   };
 }
 
-export function renderTooltipHtml(n: TreeNode, isLight: boolean, language: Language = 'de'): string {
+export function renderTooltipHtml(
+  n: TreeNode,
+  isLight: boolean,
+  language: Language = 'de',
+  totalLoc?: number
+): string {
   const t = WEBVIEW_STRINGS[language]?.tooltip || WEBVIEW_STRINGS.de.tooltip;
   const typeLabel =
     n.type === 'method'
@@ -251,6 +256,14 @@ export function renderTooltipHtml(n: TreeNode, isLight: boolean, language: Langu
       : (n.churnScore ?? 0) > 0.33
       ? '#f59e0b'
       : '#16a34a';
+
+  const locPercentNum = totalLoc && totalLoc > 0 ? ((n.loc ?? 0) / totalLoc) * 100 : undefined;
+  const locPercentStr =
+    locPercentNum !== undefined
+      ? locPercentNum < 0.1 && locPercentNum > 0
+        ? '< 0.1%'
+        : `${locPercentNum.toFixed(1)}%`
+      : undefined;
 
   const textColor = '#0f172a';
   const mutedColor = '#64748b';
@@ -279,7 +292,7 @@ export function renderTooltipHtml(n: TreeNode, isLight: boolean, language: Langu
       }
       <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px;">
         <span style="color: ${mutedColor};">${t.fileSize}</span>
-        <strong style="color: ${textColor};">${(n.loc ?? 0).toLocaleString()}</strong>
+        <strong style="color: ${textColor};">${(n.loc ?? 0).toLocaleString()}${locPercentStr ? ` <span style="font-size: 10.5px; font-weight: 500; color: ${mutedColor};">(${locPercentStr})</span>` : ''}</strong>
       </div>
       <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px;">
         <span style="color: ${mutedColor};">${t.gitCommits}</span>
@@ -526,7 +539,7 @@ export const TreemapViewer: React.FC<Props> = ({
           .select('rect')
           .style('filter', 'brightness(1.18)');
         if (tooltipRef.current) {
-          tooltipRef.current.innerHTML = renderTooltipHtml(d.data, isLight, language);
+          tooltipRef.current.innerHTML = renderTooltipHtml(d.data, isLight, language, tree.loc || displayData.loc);
           tooltipRef.current.style.display = 'block';
           updateTooltipPosition(event);
         }
@@ -618,11 +631,17 @@ export const TreemapViewer: React.FC<Props> = ({
       const subColor = isLight ? 'rgba(15, 23, 42, 0.72)' : 'rgba(255, 255, 255, 0.82)';
       const knowledgeColor = isLight ? '#0f172a' : '#ffffff';
 
+      const totalTreeLoc = tree.loc || displayData.loc || 0;
+      const locPctNum = totalTreeLoc > 0 ? ((n.loc ?? 0) / totalTreeLoc) * 100 : 0;
+      const locPct = locPctNum < 0.1 && locPctNum > 0 ? '<0.1%' : `${locPctNum.toFixed(1)}%`;
+
       if (canFitThreeLines) {
         const loc = (n.loc ?? 0).toLocaleString();
         const locText =
-          n.commitCount && n.commitCount > 0 && w >= 95
-            ? `${loc} LOC · ${n.commitCount} Commits`
+          n.commitCount && n.commitCount > 0 && w >= 115
+            ? `${loc} LOC (${locPct}) · ${n.commitCount} Commits`
+            : w >= 80
+            ? `${loc} LOC (${locPct})`
             : `${loc} LOC`;
 
         // Line 1: File/Class name
@@ -657,14 +676,14 @@ export const TreemapViewer: React.FC<Props> = ({
       } else if (canFitTwoLines) {
         const loc = (n.loc ?? 0).toLocaleString();
         const coupledDegree = selectedCoupledMap?.get(n.path);
-        let metricText = `${loc} LOC`;
+        let metricText = w >= 75 ? `${loc} LOC (${locPct})` : `${loc} LOC`;
 
         if (isKnowledgeMode) {
           metricText = knowledgeLine;
         } else if (coupledDegree !== undefined) {
           metricText = `${Math.round(coupledDegree * 100)}% 🔗 · ${loc} LOC`;
-        } else if (n.commitCount && n.commitCount > 0 && w >= 95) {
-          metricText = `${loc} LOC · ${n.commitCount} Commits`;
+        } else if (n.commitCount && n.commitCount > 0 && w >= 115) {
+          metricText = `${loc} LOC (${locPct}) · ${n.commitCount} Commits`;
         }
 
         text

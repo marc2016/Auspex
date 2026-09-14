@@ -150,11 +150,15 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
     const lang = resolveLanguage();
     const t = EXT_STRINGS[lang];
 
+    const selectedLocPctStr = (s?.totalLoc && s.totalLoc > 0 && this._selectedNode)
+      ? ` (${(((this._selectedNode.loc || 0) / s.totalLoc) * 100).toFixed(1)}%)`
+      : '';
+
     const selectedHotspotHtml = this._selectedNode ? `
       <div class="selected-card">
         ${renderFileHeaderHtml(this._selectedNode, lang, t)}
         <div class="hotspot-meta" style="padding-left: 0; margin-top: 4px;">
-          <span>${(this._selectedNode.loc || 0).toLocaleString(lang === 'de' ? 'de-DE' : 'en-US')} LOC</span> · 
+          <span>${(this._selectedNode.loc || 0).toLocaleString(lang === 'de' ? 'de-DE' : 'en-US')} LOC${selectedLocPctStr}</span> · 
           <span>${this._selectedNode.commitCount || 0} ${t.commits}</span> · 
           <span class="churn-badge">${Math.round((this._selectedNode.churnScore || 0) * 100)}% ${t.churn}</span>
           ${(this._selectedNode.fixCount ?? 0) > 0 ? ` · <span style="color: #ef4444; font-weight: 600;">${this._selectedNode.fixCount} Bugfixes</span>` : ''}
@@ -176,19 +180,22 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
          <div class="hotspots-list">
            ${s.hotspots
              .map(
-               (h: HotspotItem) => `
+               (h: HotspotItem) => {
+                 const hotspotPct = s.totalLoc > 0 ? ` (${((h.loc / s.totalLoc) * 100).toFixed(1)}%)` : '';
+                 return `
              <div class="hotspot-item" onclick="vscode.postMessage({ type: 'openFile', filePath: '${h.filePath}' })">
                <div class="hotspot-header">
                  ${renderMdiSvg(MDI_FILE_CODE, 14, 'var(--accent-color)')}
                  <span class="hotspot-name">${h.name}</span>
                </div>
                <div class="hotspot-meta">
-                 <span>${h.loc} LOC</span> · 
+                 <span>${h.loc} LOC${hotspotPct}</span> · 
                  <span>${h.commitCount} ${t.commits}</span> · 
                  <span class="churn-badge">${Math.round(h.churnScore * 100)}% ${t.churn}</span>
                </div>
              </div>
-           `
+           `;
+               }
              )
              .join('')}
          </div>`

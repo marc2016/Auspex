@@ -762,6 +762,26 @@ describe('Webview Helpers', () => {
       expect(getKnowledgeColor(emptyNode, true)).toBe('rgba(226, 232, 240, 0.85)');
       expect(getKnowledgeColor(emptyNode, false)).toBe('rgba(51, 65, 85, 0.6)');
     });
+
+    it('renders LOC percentage in tooltip when totalLoc is provided', async () => {
+      const { renderTooltipHtml } = await import('../webview/src/components/TreemapViewer');
+      const testNode: TreeNode = {
+        name: 'test.ts',
+        path: '/src/test.ts',
+        type: 'file',
+        value: 250,
+        loc: 250,
+        commitCount: 10,
+      };
+
+      const htmlWithPercent = renderTooltipHtml(testNode, true, 'de', 1000);
+      expect(htmlWithPercent).toContain('250');
+      expect(htmlWithPercent).toContain('(25.0%)');
+
+      const htmlWithoutPercent = renderTooltipHtml(testNode, true, 'de');
+      expect(htmlWithoutPercent).toContain('250');
+      expect(htmlWithoutPercent).not.toContain('(25.0%)');
+    });
   });
 });
 

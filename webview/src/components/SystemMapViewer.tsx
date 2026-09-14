@@ -175,7 +175,7 @@ export const SystemMapViewer: React.FC<Props> = ({
           .style('filter', 'brightness(1.18)');
         setHoveredNode(d.data);
         if (tooltipRef.current) {
-          tooltipRef.current.innerHTML = renderTooltipHtml(d.data, isLight, language);
+          tooltipRef.current.innerHTML = renderTooltipHtml(d.data, isLight, language, tree.loc);
           tooltipRef.current.style.display = 'block';
           updateTooltipPosition(event);
         }

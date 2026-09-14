@@ -64,6 +64,7 @@ export function isBugfixCommit(commit: {
 
 interface Props {
   node: TreeNode | null;
+  totalLoc?: number;
   onClose: () => void;
   onOpenFile: (filePath: string, startLine?: number, endLine?: number) => void;
   onOpenCommitDiff?: (commitHash: string, filePath?: string, baseCommitHash?: string) => void;
@@ -93,6 +94,7 @@ const getInitials = (name: string) => {
 
 export const TreemapDetailsPanel: React.FC<Props> = ({
   node,
+  totalLoc,
   onClose,
   onOpenFile,
   onOpenCommitDiff,
@@ -129,6 +131,14 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
   const targetFilePath = node.path.split('#')[0].replace(/^\//, '');
   const defectPercent = Math.round((node.defectRatio ?? 0) * 100);
   const churnPercent = Math.round((node.churnScore ?? 0) * 100);
+
+  const locPercentNum = totalLoc && totalLoc > 0 ? ((node.loc || 0) / totalLoc) * 100 : undefined;
+  const locPercentage =
+    locPercentNum !== undefined
+      ? locPercentNum < 0.1 && locPercentNum > 0
+        ? '< 0.1'
+        : locPercentNum.toFixed(1)
+      : undefined;
 
   const rawScore = typeof node.codeHealth === 'number' ? node.codeHealth : undefined;
   const biomarkers = node.biomarkers || [];
@@ -777,8 +787,13 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
             <Icon path={mdiFormatListNumbered} size={0.6} />
             <span>{t.metrics.loc}</span>
           </div>
-          <div style={{ fontSize: 16, fontWeight: 'bold', marginTop: 2 }}>
-            {(node.loc || 0).toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}
+          <div style={{ fontSize: 16, fontWeight: 'bold', marginTop: 2, display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span>{(node.loc || 0).toLocaleString(language === 'de' ? 'de-DE' : 'en-US')}</span>
+            {locPercentage !== undefined && (
+              <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-secondary)' }}>
+                ({locPercentage}%)
+              </span>
+            )}
           </div>
         </div>
 
@@ -1288,6 +1303,7 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
                   {(node.loc || 0).toLocaleString(language === 'de' ? 'de-DE' : 'en-US')} LOC
+                  {locPercentage !== undefined ? ` (${locPercentage}%)` : ''}
                 </span>
                 <Icon path={detailsOpen ? mdiChevronDown : mdiChevronRight} size={0.65} color="var(--text-secondary)" />
               </div>
