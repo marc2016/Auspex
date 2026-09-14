@@ -39,6 +39,7 @@ export interface ClassInfo {
   endLine: number;
   loc: number;
   methods: MethodInfo[];
+  kind?: 'class' | 'object_literal' | 'prototype' | 'module';
   codeHealth?: number;
   biomarkers?: BiomarkerFinding[];
 }

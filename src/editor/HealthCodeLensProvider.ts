@@ -86,6 +86,10 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
     return lenses;
   }
 
+  public refresh(): void {
+    this._onDidChangeCodeLenses.fire();
+  }
+
   public dispose(): void {
     this._onDidChangeCodeLenses.dispose();
   }

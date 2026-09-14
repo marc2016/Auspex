@@ -29,14 +29,28 @@ export class CodeHealthAnalyzer {
     }
 
     for (const cls of classes) {
-      if (cls.loc > 500 || cls.methods.length > 15) {
-        biomarkers.push({
+      const isObject = cls.kind === 'object_literal';
+      const isProto = cls.kind === 'prototype';
+      const isGodSmell = isObject
+        ? (cls.methods.length >= 10 || (cls.methods.length >= 4 && cls.loc >= 300) || cls.loc >= 500)
+        : (cls.loc > 500 || cls.methods.length > 15);
+
+      if (isGodSmell) {
+        const entityLabel = isObject ? 'Object' : isProto ? 'Prototype' : 'Class';
+        const smellLabel = isObject ? 'God Object' : 'God Class';
+        const finding: BiomarkerFinding = {
           type: 'brain_class',
           severity: 'high',
           startLine: cls.startLine,
           endLine: cls.endLine,
-          details: `Class '${cls.name}' has ${cls.loc} LOC and ${cls.methods.length} methods (God Class smell).`,
-        });
+          details: `${entityLabel} '${cls.name}' has ${cls.loc} LOC and ${cls.methods.length} methods (${smellLabel} smell).`,
+        };
+        biomarkers.push(finding);
+        cls.biomarkers = [finding];
+        cls.codeHealth = 5.0;
+      } else {
+        cls.codeHealth = 10.0;
+        cls.biomarkers = [];
       }
     }
 
