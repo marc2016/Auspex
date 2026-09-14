@@ -113,7 +113,7 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
 
   const showDetails = mode === 'all' || mode === 'details';
   const showHotspots = mode === 'all' || mode === 'hotspots';
-  const showHealth = mode === 'all' || mode === 'health';
+  const showHealth = mode === 'all' || mode === 'health' || mode === 'details';
 
   React.useEffect(() => {
     if (initialTab === 'health') {
@@ -897,6 +897,62 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
             {churnPercent}%
           </div>
         </div>
+
+        {/* Code Health Card in KPI Grid */}
+        <div
+          onClick={() => {
+            setHealthOpen(true);
+            const el = document.getElementById('details-health-section');
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth' });
+            }
+          }}
+          style={{
+            gridColumn: 'span 2',
+            backgroundColor: healthBg,
+            padding: '8px 10px',
+            borderRadius: 4,
+            border: `1px solid ${healthColor}40`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            cursor: 'pointer',
+            userSelect: 'none',
+            transition: 'all 0.15s ease',
+          }}
+          title={t.tabs.health}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Icon path={mdiHeartPulse} size={0.7} color={healthColor} />
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                {t.tabs.health}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginTop: 1 }}>
+                <span style={{ fontSize: 16, fontWeight: 'bold', color: healthColor }}>
+                  {score.toFixed(1)}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-secondary)' }}>/ 10.0</span>
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: healthColor,
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                padding: '2px 8px',
+                borderRadius: 4,
+                border: `1px solid ${healthColor}33`,
+              }}
+            >
+              {statusLabel}
+            </span>
+            <Icon path={mdiChevronDown} size={0.65} color="var(--text-secondary)" />
+          </div>
+        </div>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--text-secondary)' }}>
@@ -1511,6 +1567,7 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
           </div>
         ) : (
           <div
+            id="details-health-section"
             style={{
               backgroundColor: 'var(--bg-card)',
               borderRadius: 6,

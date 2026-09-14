@@ -13,5 +13,6 @@
   "views.detailsView": "Auspex Details",
   "views.healthView": "Auspex Health",
   "views.couplingView": "Auspex Kopplung",
-  "views.knowledgeView": "Auspex Monopolwissen"
+  "views.knowledgeView": "Auspex Monopolwissen",
+  "command.toggleEditorHealth": "Auspex: Code Health im Editor an/ausschalten"
 }

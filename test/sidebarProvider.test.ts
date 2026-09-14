@@ -141,6 +141,23 @@ describe('AuspexSidebarProvider', () => {
     expect(mockWebviewView.webview.html).toContain('3 Bugfixes');
   });
 
+  it('renders health badge in selected-card when codeHealth is available', () => {
+    provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
+
+    provider.setSelectedNode({
+      name: 'healthService.ts',
+      path: 'src/healthService.ts',
+      type: 'file',
+      loc: 300,
+      commitCount: 5,
+      churnScore: 0.4,
+      codeHealth: 8.5,
+    });
+
+    expect(mockWebviewView.webview.html).toContain('health-badge');
+    expect(mockWebviewView.webview.html).toContain('8.5 Health');
+  });
+
   it('renders all hotspots without truncating to 5', () => {
     provider.resolveWebviewView(mockWebviewView, {} as any, {} as any);
 

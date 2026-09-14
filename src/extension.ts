@@ -18,6 +18,8 @@ import { filterSnapshotByScope } from './analyzer/scopeFilter';
 import type { AnalysisSnapshot, TreeNode, AuspexScope } from './analyzer/types';
 import { JiraConfigManager } from './integrations/jira/jiraConfigManager';
 import { JiraClient } from './integrations/jira/jiraClient';
+import { EditorHealthDecorator } from './editor/EditorHealthDecorator';
+import { HealthCodeLensProvider } from './editor/HealthCodeLensProvider';
 
 let pipeline: AuspexPipeline;
 let storage: AuspexStorage | null = null;
@@ -33,6 +35,8 @@ let rawSnapshot: AnalysisSnapshot | null = null;
 let currentScope: AuspexScope = { mode: 'all' };
 let latestSnapshot: AnalysisSnapshot | null = null;
 let latestSelectedNode: TreeNode | null = null;
+let editorHealthDecorator: EditorHealthDecorator;
+let healthCodeLensProvider: HealthCodeLensProvider;
 let updateDetailsForEditor: (editor: vscode.TextEditor | undefined) => void;
 let setSelectedNodeAcrossProviders: (node: TreeNode | null, reveal?: boolean) => void;
 let applyCurrentScopeAndDistribute: (scope?: AuspexScope) => Promise<void>;
@@ -94,6 +98,12 @@ export async function activate(context: vscode.ExtensionContext) {
       knowledgeViewProvider.updateSnapshot(scoped);
       if (TreemapPanel.currentPanel) {
         TreemapPanel.currentPanel.sendSnapshot(scoped);
+      }
+      if (editorHealthDecorator) {
+        editorHealthDecorator.updateTree(scoped.tree);
+      }
+      if (healthCodeLensProvider) {
+        healthCodeLensProvider.updateTree(scoped.tree);
       }
       if (updateDetailsForEditor) {
         updateDetailsForEditor(vscode.window.activeTextEditor);
@@ -184,6 +194,19 @@ export async function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  // Editor Gutter Health Decorator & CodeLens Provider
+  editorHealthDecorator = new EditorHealthDecorator(context.extensionUri, workspacePath);
+  context.subscriptions.push(editorHealthDecorator);
+
+  healthCodeLensProvider = new HealthCodeLensProvider(workspacePath);
+  context.subscriptions.push(healthCodeLensProvider);
+  context.subscriptions.push(
+    vscode.languages.registerCodeLensProvider(
+      { scheme: 'file' },
+      healthCodeLensProvider
+    )
+  );
+
   if (rawSnapshot) {
     applyCurrentScopeAndDistribute();
   }
@@ -226,6 +249,32 @@ export async function activate(context: vscode.ExtensionContext) {
       const targetFilePath = (node.path || '').split('#')[0].replace(/^\//, '');
       if (targetFilePath) {
         await openFileInEditor(workspacePath, targetFilePath, node.startLine, node.endLine);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('auspex.toggleEditorHealth', async () => {
+      const config = vscode.workspace.getConfiguration('auspex');
+      const currentGutter = config.get<boolean>('editorGutter.enabled', true);
+      const nextState = !currentGutter;
+
+      await config.update('editorGutter.enabled', nextState, vscode.ConfigurationTarget.Global);
+      await config.update('codeLens.enabled', nextState, vscode.ConfigurationTarget.Global);
+
+      vscode.commands.executeCommand('setContext', 'auspex.editorHealthEnabled', nextState);
+
+      const lang = resolveLanguage();
+      const msg = nextState ? EXT_STRINGS[lang].editorHealthEnabled : EXT_STRINGS[lang].editorHealthDisabled;
+      vscode.window.showInformationMessage(msg);
+
+      if (latestSnapshot?.tree) {
+        editorHealthDecorator.updateTree(latestSnapshot.tree);
+        healthCodeLensProvider.updateTree(latestSnapshot.tree);
+      } else {
+        for (const editor of vscode.window.visibleTextEditors) {
+          editorHealthDecorator.updateEditor(editor);
+        }
       }
     })
   );
@@ -335,6 +384,9 @@ export async function activate(context: vscode.ExtensionContext) {
   };
 
   updateDetailsForEditor = (editor: vscode.TextEditor | undefined) => {
+    if (editor && editorHealthDecorator) {
+      editorHealthDecorator.updateEditor(editor);
+    }
     if (!editor || !latestSnapshot?.tree) return;
     if (editor.document.uri.scheme !== 'file') return;
 
@@ -351,6 +403,31 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       updateDetailsForEditor(editor);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument((doc) => {
+      const active = vscode.window.activeTextEditor;
+      if (active && active.document.uri.toString() === doc.uri.toString()) {
+        if (editorHealthDecorator) {
+          editorHealthDecorator.updateEditor(active);
+        }
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (
+        e.affectsConfiguration('auspex.editorGutter') ||
+        e.affectsConfiguration('auspex.codeLens')
+      ) {
+        if (latestSnapshot?.tree) {
+          editorHealthDecorator?.updateTree(latestSnapshot.tree);
+          healthCodeLensProvider?.updateTree(latestSnapshot.tree);
+        }
+      }
     })
   );
 

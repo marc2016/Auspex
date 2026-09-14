@@ -13,5 +13,6 @@
   "views.detailsView": "Auspex Details",
   "views.healthView": "Auspex Health",
   "views.couplingView": "Auspex Coupling",
-  "views.knowledgeView": "Auspex Knowledge Monopolies"
+  "views.knowledgeView": "Auspex Knowledge Monopolies",
+  "command.toggleEditorHealth": "Auspex: Toggle Code Health in Editor"
 }

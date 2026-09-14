@@ -154,6 +154,20 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
       ? ` (${(((this._selectedNode.loc || 0) / s.totalLoc) * 100).toFixed(1)}%)`
       : '';
 
+    const rawHealthScore = typeof this._selectedNode?.codeHealth === 'number'
+      ? this._selectedNode.codeHealth
+      : (this._selectedNode?.biomarkers && Array.isArray(this._selectedNode.biomarkers) && this._selectedNode.biomarkers.length > 0)
+      ? Math.max(1.0, 10.0 - this._selectedNode.biomarkers.reduce((acc: number, b: any) => acc + (b.severity === 'high' ? 2 : b.severity === 'medium' ? 1 : 0.5), 0))
+      : undefined;
+
+    const healthBadgeHtml = rawHealthScore !== undefined ? (() => {
+      const isHealthy = rawHealthScore >= 9.0;
+      const isProblematic = rawHealthScore >= 6.0 && rawHealthScore < 9.0;
+      const color = isHealthy ? '#10b981' : isProblematic ? '#f59e0b' : '#ef4444';
+      const bg = isHealthy ? 'rgba(16, 185, 129, 0.12)' : isProblematic ? 'rgba(245, 158, 11, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+      return ` · <span class="health-badge" style="color: ${color}; background-color: ${bg}; padding: 1px 5px; border-radius: 3px; font-weight: 600; border: 1px solid ${color}33;">${rawHealthScore.toFixed(1)} Health</span>`;
+    })() : '';
+
     const selectedHotspotHtml = this._selectedNode ? `
       <div class="selected-card">
         ${renderFileHeaderHtml(this._selectedNode, lang, t)}
@@ -162,6 +176,7 @@ export class AuspexSidebarProvider implements vscode.WebviewViewProvider {
           <span>${this._selectedNode.commitCount || 0} ${t.commits}</span> · 
           <span class="churn-badge">${Math.round((this._selectedNode.churnScore || 0) * 100)}% ${t.churn}</span>
           ${(this._selectedNode.fixCount ?? 0) > 0 ? ` · <span style="color: #ef4444; font-weight: 600;">${this._selectedNode.fixCount} Bugfixes</span>` : ''}
+          ${healthBadgeHtml}
         </div>
         ${((this._selectedNode.linesAdded ?? 0) > 0 || (this._selectedNode.linesDeleted ?? 0) > 0) ? `
           <div style="font-size: 11px; display: flex; gap: 8px; margin-top: 4px;">

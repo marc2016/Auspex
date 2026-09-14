@@ -70,9 +70,20 @@
         "command": "auspex.openSelectedFile",
         "title": "%command.openSelectedFile%",
         "icon": "$(go-to-file)"
+      },
+      {
+        "command": "auspex.toggleEditorHealth",
+        "title": "%command.toggleEditorHealth%",
+        "icon": "$(heart)"
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "auspex.toggleEditorHealth",
+          "group": "navigation@100"
+        }
+      ],
       "view/title": [
         {
           "command": "auspex.openTreemap",
@@ -93,6 +104,11 @@
           "command": "auspex.openSelectedFile",
           "when": "view == auspex.detailsView || view == auspex.healthView || view == auspex.couplingView || view == auspex.knowledgeView || (view == auspex.sidebarView && auspex.hasSelectedFile)",
           "group": "navigation@1"
+        },
+        {
+          "command": "auspex.toggleEditorHealth",
+          "when": "view == auspex.detailsView || view == auspex.healthView || view == auspex.overviewView",
+          "group": "navigation@4"
         }
       ]
     },
@@ -196,6 +212,21 @@
           },
           "default": [],
           "description": "Optional: Filter for specific Jira project prefixes to resolve (e.g. [\"PROJ\", \"AUS\"]). Leave empty to resolve any detected key."
+        },
+        "auspex.editorGutter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show Code Health icons in the editor gutter (margin on the left next to line numbers) for functions and biomarkers."
+        },
+        "auspex.editorGutter.showHealthy": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show green gutter icons for healthy functions (score >= 9.0). When disabled, only warnings and critical biomarkers are shown."
+        },
+        "auspex.codeLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show CodeLens annotations with Code Health score directly above function declarations in open files."
         }
       }
     }

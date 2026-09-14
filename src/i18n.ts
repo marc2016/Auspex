@@ -67,7 +67,8 @@ export const EXT_STRINGS = {
     to: 'Bis',
     apply: 'Anwenden',
     noWorktreeChanges: 'Keine ungespeicherten Worktree-Änderungen vorhanden.',
-    worktreeActive: 'Worktree-Änderungen aktiv',
+    editorHealthEnabled: 'Auspex: Code Health im Editor aktiviert.',
+    editorHealthDisabled: 'Auspex: Code Health im Editor deaktiviert.',
     viewTitles: {
       overview: 'Auspex',
       hotspots: 'Auspex Hotspots',
@@ -78,6 +79,8 @@ export const EXT_STRINGS = {
     },
   },
   en: {
+    editorHealthEnabled: 'Auspex: Code Health in Editor enabled.',
+    editorHealthDisabled: 'Auspex: Code Health in Editor disabled.',
     sidebarTitle: 'Auspex Hotspots',
     openTreemap: 'Open Hotspot Treemap',
     rescan: 'Rescan',
