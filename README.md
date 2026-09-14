@@ -15,6 +15,10 @@
   <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT" />
 </p>
 
+<p align="center">
+  <img src="assets/screenshots/01-hero-treemap.png" alt="Auspex Interactive Hotspot Treemap in Visual Studio Code" width="100%" />
+</p>
+
 ---
 
 ## 📖 Overview
@@ -36,12 +40,49 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
 - **Source Code Filter:** Toggle between all repository files and source-code-only files with a single click.
 - **Top-N Limits:** Filter views to Top 50, Top 100, Top 250, or show all elements.
 
-### 🔥 Behavioral Hotspot Detection
+### 🔥 Behavioral Hotspot Detection & Inspection
 - Combines **Git commit churn** with **defect frequency** (`fix:`, `bug:`, etc., or Jira bug tickets).
 - Highlights risky areas using a clear thermal gradient:
   - 🟢 **Green:** Stable, low-risk code.
   - 🟡 **Yellow:** Moderate activity or complexity.
   - 🔴 **Red:** Critical hotspots (frequently modified files with repeated bugfixes).
+- **Direct Editor Navigation & Git Diffs:** Click any file or function to jump directly to the editor line, view full commit history, or launch side-by-side Git diffs.
+
+<p align="center">
+  <img src="assets/screenshots/02-hotspot-details.png" alt="Auspex Hotspot Inspection & Git Diff History" width="100%" />
+</p>
+
+### 🩺 Code Health & AST Biomarkers
+- Comprehensive diagnostics detecting code smells and technical debt biomarkers (Brain Methods / God Functions, Bumpy Road control flow, Deep Nesting, Complex Conditionals).
+- Objective **Code Health Score (1.0 – 10.0)** calculated per file and aggregated across the whole workspace with actionable refactoring advice.
+
+<p align="center">
+  <img src="assets/screenshots/06-code-health.png" alt="Auspex Code Health & AST Biomarkers" width="100%" />
+</p>
+
+### 🔗 Temporal Coupling Analysis (Hidden Dependencies)
+- Detects implicit architectural dependencies between files that frequently change together in the same commits.
+- Interactive network/chord graph with configurable threshold filter (e.g. `≥ 20%`, `≥ 40%`) to uncover unexpected coupling across modules.
+
+<p align="center">
+  <img src="assets/screenshots/03-temporal-coupling.png" alt="Auspex Temporal Coupling Network Graph" width="100%" />
+</p>
+
+### 🌐 System Architecture Map
+- High-level architectural overview grouping packages, folders, and modules as concentric circular clusters.
+- Color-coded health metrics to spot architectural decay and module complexity at a single glance.
+
+<p align="center">
+  <img src="assets/screenshots/04-system-map.png" alt="Auspex System Architecture Map" width="100%" />
+</p>
+
+### 👥 Contributor & Knowledge Map
+- Evaluates code ownership, primary maintainers, and key person risks.
+- Calculates workspace **Truck Factor** and identifies **Knowledge Monopolies** (files maintained solely by a single author) to detect fragile silos before team departures.
+
+<p align="center">
+  <img src="assets/screenshots/05-knowledge-ownership.png" alt="Auspex Knowledge Monopolies & Team Ownership" width="100%" />
+</p>
 
 ### 🎨 Multi-Dimensional Visual Encodings
 Switch sizing and coloring dimensions dynamically in the top bar:
@@ -52,24 +93,13 @@ Switch sizing and coloring dimensions dynamically in the top bar:
   - `+Lines` (Lines added churn)
 - **Box Color:**
   - `Fehler-Hotspot / Defect Hotspot` (Defect ratio × Churn score)
+  - `Code Health` (1.0 – 10.0 scale)
   - `Git Churn` (Relative change frequency)
   - `Code-Wachstum / Code Growth` (Net growth ratio)
   - `Aktualität / Freshness` (Recency of the latest change)
 - **Timeframe Filtering (Zeitraum):**
   - Instantly recalculate all metrics and rescale heatmap colors within a selected time window:
   - `All time` (All), `1 week`, `1 month`, `6 months`, `1 year`, or `2 years`.
-
-### ⚡ Direct Editor Navigation & Git Diff Inspection
-- **Jump to Code:** Click any file, class, or method in the Treemap to jump directly to that exact line in the VS Code editor.
-- **Commit History & Diffs:**
-  - View full commit history in the side panel with author, timestamp, and commit message.
-  - Open Git diffs for any commit directly in the editor with one click.
-  - **Set as Base:** Mark any commit as a base commit to compare any other commit against it in a side-by-side diff.
-  - **Filter Bugfixes:** Toggle between all commits and bugfix-only commits.
-
-### 👥 Contributor & Knowledge Map
-- See author breakdown for every file and method.
-- Color-coded avatars and commit percentages to understand code ownership and identify knowledge silos.
 
 ### 🎫 Optional Read-Only Jira Integration
 - Automatically extracts Jira ticket keys (e.g. `PROJ-123`) from Git commit messages.
