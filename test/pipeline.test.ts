@@ -129,10 +129,37 @@ describe('AuspexPipeline', () => {
       storage,
       undefined,
       ['ignored_dir'],
-      50
+      undefined,
+      undefined,
+      { maxCommits: 50 }
     );
     expect(snapshot).toBeDefined();
     expect(snapshot.totalFiles).toBe(2);
+  });
+
+  it('respects .gitignore and respectGitIgnore option in pipeline.run', async () => {
+    fs.writeFileSync(path.join(tempWorkspace, '.gitignore'), 'src/utils/\n');
+
+    // With default respectGitIgnore: true
+    const snap1 = await pipeline.run(
+      tempWorkspace,
+      storage,
+      undefined,
+      ['ignored_dir']
+    );
+    expect(snap1.totalFiles).toBe(1); // helper.ts is ignored by .gitignore
+
+    // With respectGitIgnore: false
+    const snap2 = await pipeline.run(
+      tempWorkspace,
+      storage,
+      undefined,
+      ['ignored_dir'],
+      undefined,
+      undefined,
+      { respectGitIgnore: false }
+    );
+    expect(snap2.totalFiles).toBe(2); // helper.ts is included again
   });
 });
 

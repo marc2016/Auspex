@@ -26,7 +26,11 @@ export class AuspexPipeline {
     customIgnorePatterns?: string[],
     jiraClient?: JiraClient | null,
     allowedProjectKeys?: string[],
-    options?: { maxCommits?: number; authorAliases?: Record<string, string[]> }
+    options?: {
+      maxCommits?: number;
+      authorAliases?: Record<string, string[]>;
+      respectGitIgnore?: boolean;
+    }
   ): Promise<AnalysisSnapshot> {
     const startTime = Date.now();
 
@@ -121,7 +125,9 @@ export class AuspexPipeline {
       ? Array.from(new Set([...DEFAULT_IGNORE_PATTERNS, ...customIgnorePatterns]))
       : DEFAULT_IGNORE_PATTERNS;
 
-    const allFiles = this.astAnalyzer.collectFiles(workspacePath, patterns);
+    const allFiles = this.astAnalyzer.collectFiles(workspacePath, patterns, {
+      respectGitIgnore: options?.respectGitIgnore ?? true,
+    });
 
     onProgress?.({
       stage: 'ast',

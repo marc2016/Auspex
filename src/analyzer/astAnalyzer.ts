@@ -1,7 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import ignore from 'ignore';
 import type { ParsedFileInfo, ClassInfo, MethodInfo } from './types';
+
+export interface CollectFilesOptions {
+  respectGitIgnore?: boolean;
+}
 
 import { CodeHealthAnalyzer } from './codeHealth';
 import { extractorRegistry } from './extractors/registry';
@@ -9,6 +14,8 @@ import { extractorRegistry } from './extractors/registry';
 export const DEFAULT_IGNORE_PATTERNS = [
   'node_modules',
   '.git',
+  '.gitignore',
+  '.vscodeignore',
   'dist',
   'build',
   'out',
@@ -112,10 +119,71 @@ export function isPathIgnored(name: string, relPath: string, patterns: string[])
 export class AstStructureAnalyzer {
   private codeHealthAnalyzer = new CodeHealthAnalyzer();
 
-  collectFiles(dirPath: string, patterns: string[] = DEFAULT_IGNORE_PATTERNS): string[] {
+  collectFiles(
+    dirPath: string,
+    patterns: string[] = DEFAULT_IGNORE_PATTERNS,
+    options: CollectFilesOptions = {}
+  ): string[] {
+    const respectGitIgnore = options.respectGitIgnore ?? true;
     const result: string[] = [];
 
-    const walk = (dir: string) => {
+    const rootIg = ignore();
+    rootIg.add(patterns);
+
+    if (respectGitIgnore) {
+      const rootGitignore = path.join(dirPath, '.gitignore');
+      if (fs.existsSync(rootGitignore)) {
+        try {
+          const content = fs.readFileSync(rootGitignore, 'utf8');
+          rootIg.add(content);
+        } catch {
+          /* ignore read error */
+        }
+      }
+    }
+
+    interface IgnoreScope {
+      dir: string;
+      ig: ReturnType<typeof ignore>;
+    }
+
+    const initialStack: IgnoreScope[] = [{ dir: dirPath, ig: rootIg }];
+
+    const checkIgnored = (
+      entryName: string,
+      fullPath: string,
+      isDir: boolean,
+      stack: IgnoreScope[]
+    ): boolean => {
+      const relFromRoot = path.relative(dirPath, fullPath).replace(/\\/g, '/');
+
+      for (let i = stack.length - 1; i >= 0; i--) {
+        const { dir: scopeDir, ig } = stack[i];
+        const relFromScope = path.relative(scopeDir, fullPath).replace(/\\/g, '/');
+        if (!relFromScope || relFromScope === '.') continue;
+
+        const testPath = isDir
+          ? (relFromScope.endsWith('/') ? relFromScope : `${relFromScope}/`)
+          : relFromScope;
+        const res = ig.test(testPath);
+        if (res.unignored) {
+          return false;
+        }
+        if (res.ignored) {
+          return true;
+        }
+
+        if (isDir) {
+          const resNoSlash = ig.test(relFromScope);
+          if (resNoSlash.unignored) return false;
+          if (resNoSlash.ignored) return true;
+        }
+      }
+
+      return isPathIgnored(entryName, relFromRoot, patterns);
+    };
+
+    const walk = (dir: string, stack: IgnoreScope[]) => {
       let entries: fs.Dirent[];
       try {
         entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -123,23 +191,39 @@ export class AstStructureAnalyzer {
         return;
       }
 
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        const relPath = path.relative(dirPath, fullPath).replace(/\\/g, '/');
+      let currentStack = stack;
+      if (respectGitIgnore && dir !== dirPath) {
+        const localGitignore = path.join(dir, '.gitignore');
+        if (fs.existsSync(localGitignore)) {
+          try {
+            const content = fs.readFileSync(localGitignore, 'utf8');
+            const localIg = ignore().add(content);
+            currentStack = [...stack, { dir, ig: localIg }];
+          } catch {
+            /* ignore read error */
+          }
+        }
+      }
 
-        if (isPathIgnored(entry.name, relPath, patterns)) {
+      for (const entry of entries) {
+        if (entry.name === '.git') continue;
+
+        const fullPath = path.join(dir, entry.name);
+        const isDir = entry.isDirectory();
+
+        if (checkIgnored(entry.name, fullPath, isDir, currentStack)) {
           continue;
         }
 
-        if (entry.isDirectory()) {
-          walk(fullPath);
+        if (isDir) {
+          walk(fullPath, currentStack);
         } else if (entry.isFile()) {
           result.push(fullPath);
         }
       }
     };
 
-    walk(dirPath);
+    walk(dirPath, initialStack);
     return result;
   }
 

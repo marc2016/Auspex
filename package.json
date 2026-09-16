@@ -232,6 +232,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show CodeLens annotations with Code Health score directly above function declarations in open files."
+        },
+        "auspex.respectGitIgnore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Respect .gitignore files when collecting and analyzing workspace files."
         }
       }
     }
@@ -249,6 +254,7 @@
     "@mdi/js": "^7.4.47",
     "@mdi/react": "^1.6.1",
     "d3": "^7.9.0",
+    "ignore": "^7.0.9",
     "simple-git": "^3.27.0"
   },
   "devDependencies": {

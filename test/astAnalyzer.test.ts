@@ -64,6 +64,72 @@ describe('AstStructureAnalyzer', () => {
 
       expect(relPaths).toEqual(['src/components/Button.tsx', 'src/index.ts']);
     });
+
+    it('respects root .gitignore file by default', () => {
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'build'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'logs'), { recursive: true });
+
+      fs.writeFileSync(path.join(tempDir, '.gitignore'), 'build/\n*.log\nsecret.env\n');
+      fs.writeFileSync(path.join(tempDir, 'src', 'index.ts'), 'export const a = 1;');
+      fs.writeFileSync(path.join(tempDir, 'build', 'bundle.js'), 'console.log(1);');
+      fs.writeFileSync(path.join(tempDir, 'logs', 'error.log'), 'err');
+      fs.writeFileSync(path.join(tempDir, 'secret.env'), 'API_KEY=123');
+
+      const collected = analyzer.collectFiles(tempDir, []);
+      const relPaths = collected.map((p) => path.relative(tempDir, p).replace(/\\/g, '/')).sort();
+
+      expect(relPaths).toEqual(['.gitignore', 'src/index.ts']);
+    });
+
+    it('supports negation rules in .gitignore (!pattern)', () => {
+      fs.mkdirSync(path.join(tempDir, 'logs'), { recursive: true });
+
+      fs.writeFileSync(path.join(tempDir, '.gitignore'), '*.log\n!logs/important.log\n');
+      fs.writeFileSync(path.join(tempDir, 'logs', 'test.log'), 'test');
+      fs.writeFileSync(path.join(tempDir, 'logs', 'important.log'), 'keep this');
+      fs.writeFileSync(path.join(tempDir, 'main.ts'), 'console.log(1);');
+
+      const collected = analyzer.collectFiles(tempDir, []);
+      const relPaths = collected.map((p) => path.relative(tempDir, p).replace(/\\/g, '/')).sort();
+
+      expect(relPaths).toEqual(['.gitignore', 'logs/important.log', 'main.ts']);
+    });
+
+    it('ignores .gitignore rules when respectGitIgnore is false', () => {
+      fs.mkdirSync(path.join(tempDir, 'build'), { recursive: true });
+
+      fs.writeFileSync(path.join(tempDir, '.gitignore'), 'build/\n');
+      fs.writeFileSync(path.join(tempDir, 'build', 'out.js'), 'console.log("built");');
+      fs.writeFileSync(path.join(tempDir, 'app.ts'), 'export const x = 1;');
+
+      const collected = analyzer.collectFiles(tempDir, [], { respectGitIgnore: false });
+      const relPaths = collected.map((p) => path.relative(tempDir, p).replace(/\\/g, '/')).sort();
+
+      expect(relPaths).toEqual(['.gitignore', 'app.ts', 'build/out.js']);
+    });
+
+    it('respects nested .gitignore in subdirectories', () => {
+      fs.mkdirSync(path.join(tempDir, 'packages', 'client', 'gen'), { recursive: true });
+      fs.mkdirSync(path.join(tempDir, 'packages', 'server', 'gen'), { recursive: true });
+
+      fs.writeFileSync(
+        path.join(tempDir, 'packages', 'client', '.gitignore'),
+        'gen/\n'
+      );
+      fs.writeFileSync(path.join(tempDir, 'packages', 'client', 'gen', 'clientGen.ts'), 'export const c = 1;');
+      fs.writeFileSync(path.join(tempDir, 'packages', 'client', 'index.ts'), 'export const c = 2;');
+      fs.writeFileSync(path.join(tempDir, 'packages', 'server', 'gen', 'serverGen.ts'), 'export const s = 1;');
+
+      const collected = analyzer.collectFiles(tempDir, []);
+      const relPaths = collected.map((p) => path.relative(tempDir, p).replace(/\\/g, '/')).sort();
+
+      expect(relPaths).toEqual([
+        'packages/client/.gitignore',
+        'packages/client/index.ts',
+        'packages/server/gen/serverGen.ts',
+      ]);
+    });
   });
 
   describe('analyzeFile TypeScript/JavaScript', () => {

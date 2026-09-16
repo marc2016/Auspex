@@ -505,6 +505,7 @@ async function runScan(
 
       const maxCommits = config.get<number>('maxCommits', 15000);
       const authorAliases = config.get<Record<string, string[]>>('authorAliases', {});
+      const respectGitIgnore = config.get<boolean>('respectGitIgnore', true);
       const snapshot = await pipeline.run(
         workspacePath,
         storage,
@@ -521,7 +522,7 @@ async function runScan(
         ignorePatterns,
         jiraClient,
         allowedProjectKeys,
-        { maxCommits, authorAliases }
+        { maxCommits, authorAliases, respectGitIgnore }
       );
 
       rawSnapshot = snapshot;
