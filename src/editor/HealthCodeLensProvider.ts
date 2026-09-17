@@ -44,10 +44,11 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
     }
 
     const lenses: vscode.CodeLens[] = [];
+    const seenLines = new Set<number>();
 
     const collectMethods = (node: TreeNode): TreeNode[] => {
       const result: TreeNode[] = [];
-      if (node.type === 'method' && node.startLine !== undefined) {
+      if ((node.type === 'method' || node.type === 'class') && node.startLine !== undefined) {
         result.push(node);
       }
       if (node.children) {
@@ -62,9 +63,10 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
 
     for (const m of methods) {
       const startLine = m.startLine;
-      if (!startLine || startLine < 1 || startLine > document.lineCount) {
+      if (!startLine || startLine < 1 || startLine > document.lineCount || seenLines.has(startLine)) {
         continue;
       }
+      seenLines.add(startLine);
 
       const score = typeof m.codeHealth === 'number' ? m.codeHealth : 10.0;
       const biomarkers = m.biomarkers || [];

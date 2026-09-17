@@ -90,10 +90,10 @@ export class EditorHealthDecorator implements vscode.Disposable {
 
     const decoratedLines = new Set<number>();
 
-    // Collect all functions/methods (including methods in classes)
+    // Collect all functions/methods and classes
     const collectMethods = (node: TreeNode): TreeNode[] => {
       const result: TreeNode[] = [];
-      if (node.type === 'method' && node.startLine !== undefined) {
+      if ((node.type === 'method' || node.type === 'class') && node.startLine !== undefined) {
         result.push(node);
       }
       if (node.children) {
@@ -129,7 +129,9 @@ export class EditorHealthDecorator implements vscode.Disposable {
       const md = new vscode.MarkdownString();
       md.isTrusted = true;
       md.appendMarkdown(`### ${statusIcon}&nbsp;&nbsp;Auspex Code Health: **${score.toFixed(1)} / 10.0** (${statusLabel})\n\n`);
-      md.appendMarkdown(`**${isDe ? 'Funktion' : 'Function'}:** \`${m.name}()\`\n\n`);
+      const typeLabel = m.type === 'class' ? (isDe ? 'Klasse / Komponente' : 'Class / Component') : (isDe ? 'Funktion' : 'Function');
+      const displayName = m.name.endsWith('()') ? m.name : `${m.name}()`;
+      md.appendMarkdown(`**${typeLabel}:** \`${displayName}\`\n\n`);
       md.appendMarkdown(`*${m.loc} LOC (Z. ${m.startLine}–${m.endLine})*\n\n`);
 
       if (biomarkers.length > 0) {

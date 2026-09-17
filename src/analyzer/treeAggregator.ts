@@ -192,6 +192,8 @@ export class TreeAggregator {
         }
       }
 
+      const methodMap = new Map<string, TreeNode>();
+
       for (const m of file.methods) {
         const methodNode: TreeNode = {
           name: m.name,
@@ -217,18 +219,32 @@ export class TreeAggregator {
           knowledgeRisk: fileKnowledge.knowledgeRisk,
           codeHealth: m.codeHealth ?? file.codeHealth ?? 10.0,
           biomarkers: m.biomarkers || [],
+          children: [],
         };
+        methodMap.set(m.name, methodNode);
 
-        const enclosingClass = file.classes.find(
-          (c) => m.startLine >= c.startLine && m.endLine <= c.endLine
-        );
+        // 1. Check if method is enclosed by another method (parent function)
+        const parentMethodName = m.parentMethod;
+        const parentMethodNode = parentMethodName
+          ? methodMap.get(`${parentMethodName}()`) || methodMap.get(parentMethodName)
+          : undefined;
 
-        if (enclosingClass && classMap.has(enclosingClass.name)) {
-          const parentCls = classMap.get(enclosingClass.name)!;
-          if (!parentCls.children) parentCls.children = [];
-          parentCls.children.push(methodNode);
+        if (parentMethodNode) {
+          if (!parentMethodNode.children) parentMethodNode.children = [];
+          parentMethodNode.children.push(methodNode);
         } else {
-          fileChildren.push(methodNode);
+          // 2. Check enclosing class
+          const enclosingClass = file.classes.find(
+            (c) => m.startLine >= c.startLine && m.endLine <= c.endLine
+          );
+
+          if (enclosingClass && classMap.has(enclosingClass.name)) {
+            const parentCls = classMap.get(enclosingClass.name)!;
+            if (!parentCls.children) parentCls.children = [];
+            parentCls.children.push(methodNode);
+          } else {
+            fileChildren.push(methodNode);
+          }
         }
       }
 

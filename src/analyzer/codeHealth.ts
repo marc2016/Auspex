@@ -31,13 +31,26 @@ export class CodeHealthAnalyzer {
     for (const cls of classes) {
       const isObject = cls.kind === 'object_literal';
       const isProto = cls.kind === 'prototype';
-      const isGodSmell = isObject
+      const isComponent = cls.kind === 'component';
+      const isModule = cls.kind === 'module';
+
+      const isGodSmell = isComponent
+        ? (cls.loc >= 400 || cls.methods.length >= 12)
+        : isObject || isModule
         ? (cls.methods.length >= 10 || (cls.methods.length >= 4 && cls.loc >= 300) || cls.loc >= 500)
         : (cls.loc > 500 || cls.methods.length > 15);
 
       if (isGodSmell) {
-        const entityLabel = isObject ? 'Object' : isProto ? 'Prototype' : 'Class';
-        const smellLabel = isObject ? 'God Object' : 'God Class';
+        const entityLabel = isComponent
+          ? 'Component'
+          : isObject
+          ? 'Object'
+          : isProto
+          ? 'Prototype'
+          : isModule
+          ? 'Module'
+          : 'Class';
+        const smellLabel = isComponent ? 'God Component' : isObject ? 'God Object' : 'God Class';
         const finding: BiomarkerFinding = {
           type: 'brain_class',
           severity: 'high',
@@ -56,7 +69,10 @@ export class CodeHealthAnalyzer {
 
     // 2. Method-level analysis
     for (const method of methods) {
-      const methodFindings = this.analyzeMethod(lines, method, lang);
+      const childMethods = methods.filter(
+        (m) => m !== method && m.startLine > method.startLine && m.endLine <= method.endLine
+      );
+      const methodFindings = this.analyzeMethod(lines, method, lang, childMethods);
       biomarkers.push(...methodFindings);
 
       // Compute individual method Code Health
@@ -108,7 +124,12 @@ export class CodeHealthAnalyzer {
    * Analyzes an individual method/function for biomarkers:
    * Brain Method, Bumpy Road, Nested Complexity, Complex Conditionals, Excess Parameters.
    */
-  public analyzeMethod(lines: string[], method: MethodInfo, lang: string): BiomarkerFinding[] {
+  public analyzeMethod(
+    lines: string[],
+    method: MethodInfo,
+    lang: string,
+    childMethods: MethodInfo[] = []
+  ): BiomarkerFinding[] {
     const findings: BiomarkerFinding[] = [];
     const startIdx = Math.max(0, method.startLine - 1);
     const endIdx = Math.min(lines.length - 1, method.endLine - 1);
@@ -135,15 +156,19 @@ export class CodeHealthAnalyzer {
       }
     }
 
-    // B. Large Method
-    if (methodLoc >= 70) {
+    // B. Large Method (use Net LOC if method has child methods)
+    const childLocSum = childMethods.reduce((sum, c) => sum + c.loc, 0);
+    const netLoc = Math.max(1, methodLoc - childLocSum);
+    const effectiveLoc = childMethods.length > 0 ? netLoc : methodLoc;
+
+    if (effectiveLoc >= 70) {
       findings.push({
         type: 'large_method',
-        severity: methodLoc >= 120 ? 'high' : 'medium',
+        severity: effectiveLoc >= 120 ? 'high' : 'medium',
         functionName: method.name,
         startLine: method.startLine,
         endLine: method.endLine,
-        details: `Function '${method.name}' exceeds standard length with ${methodLoc} LOC.`,
+        details: `Function '${method.name}' exceeds standard length with ${effectiveLoc} ${childMethods.length > 0 ? 'net ' : ''}LOC.`,
       });
     }
 
@@ -164,6 +189,17 @@ export class CodeHealthAnalyzer {
     }
 
     for (let i = 0; i < methodLines.length; i++) {
+      const currentLineNum = method.startLine + i;
+
+      // Scope isolation: if this line falls inside an inner function, do NOT count its complexity/nesting for the outer function
+      const isInsideChild = childMethods.some(
+        (c) => currentLineNum >= c.startLine && currentLineNum <= c.endLine
+      );
+      if (isInsideChild) {
+        nestingLevels.push(currentNesting);
+        continue;
+      }
+
       const line = methodLines[i];
       const trimmed = line.trim();
 
@@ -271,7 +307,7 @@ export class CodeHealthAnalyzer {
       }
     }
 
-    if (bumps >= 3 && methodLoc >= 30) {
+    if (bumps >= 3 && effectiveLoc >= 30) {
       findings.push({
         type: 'bumpy_road',
         severity: bumps >= 5 ? 'high' : 'medium',
@@ -284,14 +320,14 @@ export class CodeHealthAnalyzer {
 
     // G. Brain Method (God Function)
     // Combines high LOC, high cyclomatic complexity, and nesting
-    if (methodLoc >= 50 && cyclomaticComplexity >= 8 && maxNesting >= 3) {
+    if (effectiveLoc >= 50 && cyclomaticComplexity >= 8 && maxNesting >= 3) {
       findings.push({
         type: 'brain_method',
         severity: 'high',
         functionName: method.name,
         startLine: method.startLine,
         endLine: method.endLine,
-        details: `Brain Method detected: '${method.name}' centralizes excessive complexity (${methodLoc} LOC, CC=${cyclomaticComplexity}, nesting=${maxNesting}).`,
+        details: `Brain Method detected: '${method.name}' centralizes excessive complexity (${effectiveLoc} LOC, CC=${cyclomaticComplexity}, nesting=${maxNesting}).`,
       });
     }
 

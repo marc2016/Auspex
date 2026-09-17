@@ -29,6 +29,8 @@ export interface MethodInfo {
   startLine: number;
   endLine: number;
   loc: number;
+  parentMethod?: string;
+  isNested?: boolean;
   codeHealth?: number;
   biomarkers?: BiomarkerFinding[];
 }
@@ -39,7 +41,7 @@ export interface ClassInfo {
   endLine: number;
   loc: number;
   methods: MethodInfo[];
-  kind?: 'class' | 'object_literal' | 'prototype' | 'module';
+  kind?: 'class' | 'object_literal' | 'prototype' | 'module' | 'component';
   codeHealth?: number;
   biomarkers?: BiomarkerFinding[];
 }
