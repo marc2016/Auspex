@@ -289,4 +289,32 @@ describe('EditorHealthDecorator', () => {
   it('disposes all decoration types on dispose()', () => {
     expect(() => decorator.dispose()).not.toThrow();
   });
+
+  it('updates editor decorations dynamically when setFileNode is called', () => {
+    const updatedNode: TreeNode = {
+      name: 'service.ts',
+      path: 'src/service.ts',
+      type: 'file',
+      value: 100,
+      loc: 100,
+      codeHealth: 5.5,
+      children: [
+        {
+          name: 'criticalFunc',
+          path: 'src/service.ts#criticalFunc',
+          type: 'method',
+          value: 10,
+          loc: 10,
+          startLine: 15,
+          endLine: 25,
+          codeHealth: 5.5,
+        },
+      ],
+    };
+
+    decorator.setFileNode('src/service.ts', updatedNode);
+    decorator.updateEditor(mockEditor);
+
+    expect(mockEditor.setDecorations).toHaveBeenCalled();
+  });
 });

@@ -156,97 +156,7 @@ export class TreeAggregator {
       );
 
       // Build classes and methods under the file
-      const fileChildren: TreeNode[] = [];
-      const classMap = new Map<string, TreeNode>();
-
-      if (file.classes && file.classes.length > 0) {
-        for (const cls of file.classes) {
-          const classNode: TreeNode = {
-            name: cls.name,
-            path: `${file.filePath}#${cls.name}`,
-            type: 'class',
-            value: cls.loc,
-            loc: cls.loc,
-            commitCount,
-            churnScore: 0,
-            fixCount,
-            featCount,
-            refactorCount,
-            linesAdded,
-            linesDeleted,
-            defectRatio,
-            lastModifiedAt,
-            startLine: cls.startLine,
-            endLine: cls.endLine,
-            contributors: fileContributors,
-            commits: fileCommits,
-            primaryAuthor: fileKnowledge.primaryAuthor,
-            primaryAuthorPercentage: fileKnowledge.primaryAuthorPercentage,
-            knowledgeRisk: fileKnowledge.knowledgeRisk,
-            codeHealth: cls.codeHealth ?? file.codeHealth ?? 10.0,
-            biomarkers: cls.biomarkers || [],
-            children: [],
-          };
-          classMap.set(cls.name, classNode);
-          fileChildren.push(classNode);
-        }
-      }
-
-      const methodMap = new Map<string, TreeNode>();
-
-      for (const m of file.methods) {
-        const methodNode: TreeNode = {
-          name: m.name,
-          path: `${file.filePath}#${m.name}`,
-          type: 'method',
-          value: m.loc,
-          loc: m.loc,
-          commitCount,
-          churnScore: 0,
-          fixCount,
-          featCount,
-          refactorCount,
-          linesAdded,
-          linesDeleted,
-          defectRatio,
-          lastModifiedAt,
-          startLine: m.startLine,
-          endLine: m.endLine,
-          contributors: fileContributors,
-          commits: fileCommits,
-          primaryAuthor: fileKnowledge.primaryAuthor,
-          primaryAuthorPercentage: fileKnowledge.primaryAuthorPercentage,
-          knowledgeRisk: fileKnowledge.knowledgeRisk,
-          codeHealth: m.codeHealth ?? file.codeHealth ?? 10.0,
-          biomarkers: m.biomarkers || [],
-          children: [],
-        };
-        methodMap.set(m.name, methodNode);
-
-        // 1. Check if method is enclosed by another method (parent function)
-        const parentMethodName = m.parentMethod;
-        const parentMethodNode = parentMethodName
-          ? methodMap.get(`${parentMethodName}()`) || methodMap.get(parentMethodName)
-          : undefined;
-
-        if (parentMethodNode) {
-          if (!parentMethodNode.children) parentMethodNode.children = [];
-          parentMethodNode.children.push(methodNode);
-        } else {
-          // 2. Check enclosing class
-          const enclosingClass = file.classes.find(
-            (c) => m.startLine >= c.startLine && m.endLine <= c.endLine
-          );
-
-          if (enclosingClass && classMap.has(enclosingClass.name)) {
-            const parentCls = classMap.get(enclosingClass.name)!;
-            if (!parentCls.children) parentCls.children = [];
-            parentCls.children.push(methodNode);
-          } else {
-            fileChildren.push(methodNode);
-          }
-        }
-      }
+      const fileChildren = this.buildFileChildren(file, fileStats, fileKnowledge);
 
       const fileNode: TreeNode = {
         name: path.basename(file.filePath),
@@ -509,5 +419,239 @@ export class TreeAggregator {
         return scoreB - scoreA;
       })
       .slice(0, 20);
+  }
+
+  buildFileChildren(
+    file: ParsedFileInfo,
+    fileStats?: FileCommitStat,
+    fileKnowledge?: Partial<KnowledgeSummary>
+  ): TreeNode[] {
+    const fileChildren: TreeNode[] = [];
+    const classMap = new Map<string, TreeNode>();
+    const commitCount = fileStats?.commitCount ?? 0;
+    const fixCount = fileStats?.fixCount ?? 0;
+    const featCount = fileStats?.featCount ?? 0;
+    const refactorCount = fileStats?.refactorCount ?? 0;
+    const linesAdded = fileStats?.linesAdded ?? 0;
+    const linesDeleted = fileStats?.linesDeleted ?? 0;
+    const defectRatio = commitCount > 0 ? fixCount / commitCount : 0;
+    const lastModifiedAt = fileStats?.lastModifiedAt ?? file.lastModifiedAt;
+    const fileContributors = fileStats?.contributors ?? [];
+    const fileCommits = fileStats?.commits ?? [];
+
+    if (file.classes && file.classes.length > 0) {
+      for (const cls of file.classes) {
+        const classNode: TreeNode = {
+          name: cls.name,
+          path: `${file.filePath}#${cls.name}`,
+          type: 'class',
+          value: cls.loc,
+          loc: cls.loc,
+          commitCount,
+          churnScore: 0,
+          fixCount,
+          featCount,
+          refactorCount,
+          linesAdded,
+          linesDeleted,
+          defectRatio,
+          lastModifiedAt,
+          startLine: cls.startLine,
+          endLine: cls.endLine,
+          contributors: fileContributors,
+          commits: fileCommits,
+          primaryAuthor: fileKnowledge?.primaryAuthor,
+          primaryAuthorPercentage: fileKnowledge?.primaryAuthorPercentage,
+          knowledgeRisk: fileKnowledge?.knowledgeRisk,
+          codeHealth: cls.codeHealth ?? file.codeHealth ?? 10.0,
+          biomarkers: cls.biomarkers || [],
+          children: [],
+        };
+        classMap.set(cls.name, classNode);
+        fileChildren.push(classNode);
+      }
+    }
+
+    const methodMap = new Map<string, TreeNode>();
+
+    for (const m of file.methods) {
+      const methodNode: TreeNode = {
+        name: m.name,
+        path: `${file.filePath}#${m.name}`,
+        type: 'method',
+        value: m.loc,
+        loc: m.loc,
+        commitCount,
+        churnScore: 0,
+        fixCount,
+        featCount,
+        refactorCount,
+        linesAdded,
+        linesDeleted,
+        defectRatio,
+        lastModifiedAt,
+        startLine: m.startLine,
+        endLine: m.endLine,
+        contributors: fileContributors,
+        commits: fileCommits,
+        primaryAuthor: fileKnowledge?.primaryAuthor,
+        primaryAuthorPercentage: fileKnowledge?.primaryAuthorPercentage,
+        knowledgeRisk: fileKnowledge?.knowledgeRisk,
+        codeHealth: m.codeHealth ?? file.codeHealth ?? 10.0,
+        biomarkers: m.biomarkers || [],
+        children: [],
+      };
+      methodMap.set(m.name, methodNode);
+
+      const parentMethodName = m.parentMethod;
+      const parentMethodNode = parentMethodName
+        ? methodMap.get(`${parentMethodName}()`) || methodMap.get(parentMethodName)
+        : undefined;
+
+      if (parentMethodNode) {
+        if (!parentMethodNode.children) parentMethodNode.children = [];
+        parentMethodNode.children.push(methodNode);
+      } else {
+        const enclosingClass = file.classes.find(
+          (c) => m.startLine >= c.startLine && m.endLine <= c.endLine
+        );
+
+        if (enclosingClass && classMap.has(enclosingClass.name)) {
+          const parentCls = classMap.get(enclosingClass.name)!;
+          if (!parentCls.children) parentCls.children = [];
+          parentCls.children.push(methodNode);
+        } else {
+          fileChildren.push(methodNode);
+        }
+      }
+    }
+
+    return fileChildren;
+  }
+
+  updateFileInTree(root: TreeNode, file: ParsedFileInfo): TreeNode {
+    const normalizedTarget = file.filePath.replace(/\\/g, '/').replace(/^\/+/, '');
+
+    const findNode = (n: TreeNode): TreeNode | null => {
+      if (n.type === 'file') {
+        const norm = n.path.replace(/\\/g, '/').replace(/^\/+/, '');
+        if (norm === normalizedTarget) return n;
+      }
+      if (n.children) {
+        for (const child of n.children) {
+          const res = findNode(child);
+          if (res) return res;
+        }
+      }
+      return null;
+    };
+
+    const fileNode = findNode(root);
+
+    if (fileNode) {
+      const fileChildren = this.buildFileChildren(file, {
+        commitCount: fileNode.commitCount,
+        fixCount: fileNode.fixCount,
+        featCount: fileNode.featCount,
+        refactorCount: fileNode.refactorCount,
+        linesAdded: fileNode.linesAdded,
+        linesDeleted: fileNode.linesDeleted,
+        lastModifiedAt: file.lastModifiedAt,
+        contributors: fileNode.contributors,
+        commits: fileNode.commits,
+      } as any, {
+        primaryAuthor: fileNode.primaryAuthor,
+        primaryAuthorPercentage: fileNode.primaryAuthorPercentage,
+        knowledgeRisk: fileNode.knowledgeRisk,
+      });
+
+      fileNode.loc = file.loc;
+      fileNode.value = file.loc;
+      fileNode.lastModifiedAt = file.lastModifiedAt;
+      fileNode.codeHealth = file.codeHealth ?? 10.0;
+      fileNode.biomarkers = file.biomarkers || [];
+      fileNode.children = fileChildren.length > 0 ? fileChildren : undefined;
+      return fileNode;
+    } else {
+      const fileChildren = this.buildFileChildren(file);
+      const newFileNode: TreeNode = {
+        name: path.basename(file.filePath),
+        path: file.filePath,
+        type: 'file',
+        value: file.loc,
+        loc: file.loc,
+        commitCount: 0,
+        churnScore: 0,
+        fixCount: 0,
+        featCount: 0,
+        refactorCount: 0,
+        linesAdded: 0,
+        linesDeleted: 0,
+        defectRatio: 0,
+        lastModifiedAt: file.lastModifiedAt,
+        codeHealth: file.codeHealth ?? 10.0,
+        biomarkers: file.biomarkers || [],
+        children: fileChildren.length > 0 ? fileChildren : undefined,
+      };
+
+      const dirName = path.dirname(file.filePath).replace(/\\/g, '/').replace(/^\/+/, '');
+      let currentFolder = root;
+      if (dirName && dirName !== '.') {
+        const parts = dirName.split('/');
+        let curPath = '';
+        for (const part of parts) {
+          curPath = curPath ? `${curPath}/${part}` : part;
+          let next = currentFolder.children?.find((c) => c.type === 'folder' && c.name === part);
+          if (!next) {
+            next = {
+              name: part,
+              path: `/${curPath}`,
+              type: 'folder',
+              value: 0,
+              loc: 0,
+              commitCount: 0,
+              churnScore: 0,
+              fixCount: 0,
+              featCount: 0,
+              refactorCount: 0,
+              linesAdded: 0,
+              linesDeleted: 0,
+              defectRatio: 0,
+              children: [],
+            };
+            if (!currentFolder.children) currentFolder.children = [];
+            currentFolder.children.push(next);
+          }
+          currentFolder = next;
+        }
+      }
+
+      if (!currentFolder.children) currentFolder.children = [];
+      currentFolder.children.push(newFileNode);
+      return newFileNode;
+    }
+  }
+
+  createStandaloneFileNode(file: ParsedFileInfo): TreeNode {
+    const fileChildren = this.buildFileChildren(file);
+    return {
+      name: path.basename(file.filePath),
+      path: file.filePath,
+      type: 'file',
+      value: file.loc,
+      loc: file.loc,
+      commitCount: 0,
+      churnScore: 0,
+      fixCount: 0,
+      featCount: 0,
+      refactorCount: 0,
+      linesAdded: 0,
+      linesDeleted: 0,
+      defectRatio: 0,
+      lastModifiedAt: file.lastModifiedAt,
+      codeHealth: file.codeHealth ?? 10.0,
+      biomarkers: file.biomarkers || [],
+      children: fileChildren.length > 0 ? fileChildren : undefined,
+    };
   }
 }

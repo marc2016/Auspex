@@ -22,6 +22,7 @@ export class EditorHealthDecorator implements vscode.Disposable {
   private _workspacePath: string;
   private _extensionUri: vscode.Uri;
   private _currentTree: TreeNode | null = null;
+  private _fileNodes = new Map<string, TreeNode>();
 
   constructor(extensionUri: vscode.Uri, workspacePath: string) {
     this._extensionUri = extensionUri;
@@ -47,8 +48,14 @@ export class EditorHealthDecorator implements vscode.Disposable {
     });
   }
 
+  public setFileNode(relPath: string, node: TreeNode): void {
+    const norm = relPath.replace(/\\/g, '/').replace(/^\/+/, '');
+    this._fileNodes.set(norm, node);
+  }
+
   public updateTree(tree: TreeNode | null): void {
     this._currentTree = tree;
+    this._fileNodes.clear();
     for (const editor of vscode.window.visibleTextEditors) {
       this.updateEditor(editor);
     }
@@ -63,7 +70,7 @@ export class EditorHealthDecorator implements vscode.Disposable {
     const gutterEnabled = config.get<boolean>('editorGutter.enabled', true);
     const showHealthy = config.get<boolean>('editorGutter.showHealthy', false);
 
-    if (!gutterEnabled || !this._currentTree) {
+    if (!gutterEnabled) {
       this.clearEditor(editor);
       return;
     }
@@ -75,7 +82,8 @@ export class EditorHealthDecorator implements vscode.Disposable {
       return;
     }
 
-    const fileNode = findFileNode(this._currentTree, relPath);
+    const normPath = relPath.replace(/\\/g, '/').replace(/^\/+/, '');
+    const fileNode = this._fileNodes.get(normPath) || (this._currentTree ? findFileNode(this._currentTree, relPath) : null);
     if (!fileNode) {
       this.clearEditor(editor);
       return;

@@ -240,4 +240,44 @@ describe('HealthCodeLensProvider', () => {
     expect(() => provider.refresh()).not.toThrow();
     expect(() => provider.dispose()).not.toThrow();
   });
+
+  it('updates CodeLens positions dynamically when setFileNode is provided', () => {
+    provider.updateTree(mockTree);
+
+    const doc: any = {
+      uri: { scheme: 'file', fsPath: '/workspace/src/calc.ts' },
+      lineCount: 100,
+    };
+
+    // Initially add is at line 5 (range.start.line = 4)
+    let lenses = provider.provideCodeLenses(doc, {} as any);
+    expect(lenses[0].range.start.line).toBe(4);
+
+    // Dynamic update moves add to line 12 (e.g. after user inserted lines above)
+    const updatedNode: TreeNode = {
+      name: 'calc.ts',
+      path: 'src/calc.ts',
+      type: 'file',
+      value: 100,
+      loc: 100,
+      codeHealth: 9.5,
+      children: [
+        {
+          name: 'add',
+          path: 'src/calc.ts#add',
+          type: 'method',
+          value: 10,
+          loc: 10,
+          startLine: 12,
+          endLine: 22,
+          codeHealth: 9.5,
+        },
+      ],
+    };
+
+    provider.setFileNode('src/calc.ts', updatedNode);
+    lenses = provider.provideCodeLenses(doc, {} as any);
+    expect(lenses).toHaveLength(1);
+    expect(lenses[0].range.start.line).toBe(11);
+  });
 });

@@ -227,6 +227,74 @@ export class AstStructureAnalyzer {
     return result;
   }
 
+  isSupportedExtension(ext: string): boolean {
+    return !!CODE_EXTENSIONS[ext.toLowerCase()];
+  }
+
+  analyzeSource(content: string, relPath: string, lastModifiedAt: number = Date.now()): ParsedFileInfo {
+    const ext = path.extname(relPath).toLowerCase();
+    const lang = CODE_EXTENSIONS[ext];
+
+    if (!lang) {
+      let loc = 0;
+      if (content.length > 0) {
+        loc = 1;
+        for (let i = 0; i < content.length; i++) {
+          if (content.charCodeAt(i) === 10) loc++;
+        }
+      }
+      const fileHash = crypto.createHash('sha256').update(content).digest('hex');
+      return {
+        filePath: relPath,
+        loc,
+        classes: [],
+        methods: [],
+        fileHash,
+        lastModifiedAt,
+        codeHealth: 10.0,
+        biomarkers: [],
+      };
+    }
+
+    if (content.length > 2 * 1024 * 1024) {
+      return {
+        filePath: relPath,
+        loc: Math.round(content.length / 40),
+        classes: [],
+        methods: [],
+        fileHash: '',
+        lastModifiedAt,
+        codeHealth: 5.0,
+        biomarkers: [
+          {
+            type: 'brain_class',
+            severity: 'high',
+            details: `Oversized file (${(content.length / (1024 * 1024)).toFixed(1)}MB). AST parsing skipped for performance.`,
+          },
+        ],
+      };
+    }
+
+    const fileHash = crypto.createHash('sha256').update(content).digest('hex');
+    const lines = content.split('\n');
+    const loc = lines.length;
+
+    const { namespace, classes, methods } = this.extractStructure(lines, lang);
+    const healthResult = this.codeHealthAnalyzer.analyzeFile(lines, methods, classes, lang);
+
+    return {
+      filePath: relPath,
+      namespace,
+      loc,
+      classes,
+      methods,
+      fileHash,
+      lastModifiedAt,
+      codeHealth: healthResult.score,
+      biomarkers: healthResult.biomarkers,
+    };
+  }
+
   analyzeFile(absolutePath: string, relPath: string): ParsedFileInfo {
     let stat: fs.Stats | undefined;
     try {
@@ -310,24 +378,7 @@ export class AstStructureAnalyzer {
       };
     }
 
-    const fileHash = crypto.createHash('sha256').update(content).digest('hex');
-    const lines = content.split('\n');
-    const loc = lines.length;
-
-    const { namespace, classes, methods } = this.extractStructure(lines, lang);
-    const healthResult = this.codeHealthAnalyzer.analyzeFile(lines, methods, classes, lang);
-
-    return {
-      filePath: relPath,
-      namespace,
-      loc,
-      classes,
-      methods,
-      fileHash,
-      lastModifiedAt,
-      codeHealth: healthResult.score,
-      biomarkers: healthResult.biomarkers,
-    };
+    return this.analyzeSource(content, relPath, lastModifiedAt);
   }
 
   private extractStructure(

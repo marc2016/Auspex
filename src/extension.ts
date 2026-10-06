@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import path from 'path';
 import { AuspexPipeline } from './analyzer/pipeline';
+import { AstStructureAnalyzer } from './analyzer/astAnalyzer';
+import { TreeAggregator } from './analyzer/treeAggregator';
 import { AuspexStorage } from './storage/cache';
 import { TreemapPanel } from './panels/TreemapPanel';
 import { HelpPanel } from './panels/HelpPanel';
@@ -401,20 +403,94 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   };
 
+  const astAnalyzer = new AstStructureAnalyzer();
+  const treeAggregator = new TreeAggregator();
+
+  const syncDocumentHealth = (doc: vscode.TextDocument) => {
+    if (!doc || doc.uri.scheme !== 'file') return;
+
+    const fsPath = doc.uri.fsPath;
+    const relPath = path.relative(workspacePath, fsPath).replace(/\\/g, '/');
+    if (!relPath || relPath.startsWith('..') || path.isAbsolute(relPath)) return;
+
+    const ext = path.extname(relPath).toLowerCase();
+    if (!astAnalyzer.isSupportedExtension(ext)) return;
+
+    const content = doc.getText();
+    const parsed = astAnalyzer.analyzeSource(content, relPath);
+
+    if (latestSnapshot?.tree) {
+      treeAggregator.updateFileInTree(latestSnapshot.tree, parsed);
+    }
+    if (rawSnapshot?.tree && rawSnapshot.tree !== latestSnapshot?.tree) {
+      treeAggregator.updateFileInTree(rawSnapshot.tree, parsed);
+    }
+
+    const fileNode = latestSnapshot?.tree
+      ? findFileNode(latestSnapshot.tree, relPath)
+      : treeAggregator.createStandaloneFileNode(parsed);
+
+    if (fileNode) {
+      editorHealthDecorator?.setFileNode(relPath, fileNode);
+      healthCodeLensProvider?.setFileNode(relPath, fileNode);
+    }
+
+    for (const editor of vscode.window.visibleTextEditors) {
+      if (editor.document.uri.toString() === doc.uri.toString()) {
+        editorHealthDecorator?.updateEditor(editor);
+      }
+    }
+
+    healthCodeLensProvider?.refresh();
+
+    if (latestSelectedNode) {
+      const selectedRelPath = (latestSelectedNode.path || '').split('#')[0].replace(/^\//, '');
+      if (selectedRelPath === relPath && fileNode) {
+        setSelectedNodeAcrossProviders(fileNode, false);
+      }
+    }
+  };
+
+  let documentChangeTimer: NodeJS.Timeout | null = null;
+  context.subscriptions.push({
+    dispose: () => {
+      if (documentChangeTimer) {
+        clearTimeout(documentChangeTimer);
+        documentChangeTimer = null;
+      }
+    },
+  });
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      if (e.document.uri.scheme !== 'file') return;
+      if (e.contentChanges.length === 0) return;
+
+      if (documentChangeTimer) {
+        clearTimeout(documentChangeTimer);
+      }
+      documentChangeTimer = setTimeout(() => {
+        syncDocumentHealth(e.document);
+      }, 250);
+    })
+  );
+
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTextEditor((editor) => {
+      if (editor && editor.document.uri.scheme === 'file') {
+        syncDocumentHealth(editor.document);
+      }
       updateDetailsForEditor(editor);
     })
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      const active = vscode.window.activeTextEditor;
-      if (active && active.document.uri.toString() === doc.uri.toString()) {
-        if (editorHealthDecorator) {
-          editorHealthDecorator.updateEditor(active);
-        }
+      if (documentChangeTimer) {
+        clearTimeout(documentChangeTimer);
+        documentChangeTimer = null;
       }
+      syncDocumentHealth(doc);
     })
   );
 
@@ -434,6 +510,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Initialize with currently active editor if one is already open
   if (vscode.window.activeTextEditor) {
+    if (vscode.window.activeTextEditor.document.uri.scheme === 'file') {
+      syncDocumentHealth(vscode.window.activeTextEditor.document);
+    }
     updateDetailsForEditor(vscode.window.activeTextEditor);
   }
 

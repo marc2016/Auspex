@@ -8,13 +8,20 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
   public readonly onDidChangeCodeLenses: vscode.Event<void> = this._onDidChangeCodeLenses.event;
   private _workspacePath: string;
   private _currentTree: TreeNode | null = null;
+  private _fileNodes = new Map<string, TreeNode>();
 
   constructor(workspacePath: string) {
     this._workspacePath = workspacePath;
   }
 
+  public setFileNode(relPath: string, node: TreeNode): void {
+    const norm = relPath.replace(/\\/g, '/').replace(/^\/+/, '');
+    this._fileNodes.set(norm, node);
+  }
+
   public updateTree(tree: TreeNode | null): void {
     this._currentTree = tree;
+    this._fileNodes.clear();
     this._onDidChangeCodeLenses.fire();
   }
 
@@ -22,7 +29,7 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
     document: vscode.TextDocument,
     _token: vscode.CancellationToken
   ): vscode.CodeLens[] {
-    if (!this._currentTree || document.uri.scheme !== 'file') {
+    if (document.uri.scheme !== 'file') {
       return [];
     }
 
@@ -38,7 +45,8 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
       return [];
     }
 
-    const fileNode = findFileNode(this._currentTree, relPath);
+    const normPath = relPath.replace(/\\/g, '/').replace(/^\/+/, '');
+    const fileNode = this._fileNodes.get(normPath) || (this._currentTree ? findFileNode(this._currentTree, relPath) : null);
     if (!fileNode) {
       return [];
     }

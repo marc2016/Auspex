@@ -301,5 +301,93 @@ describe('TreeAggregator', () => {
     expect(srcFolder?.biomarkers?.length).toBe(50); // Capped from 70 to 50
     expect(tree.biomarkers?.length).toBe(50);
   });
+
+  describe('updateFileInTree & createStandaloneFileNode', () => {
+    it('updates file node line numbers and structure in-place while preserving git stats', () => {
+      const initialFile: ParsedFileInfo = {
+        filePath: 'src/calc.ts',
+        loc: 10,
+        fileHash: 'h1',
+        classes: [],
+        methods: [
+          {
+            name: 'add',
+            startLine: 3,
+            endLine: 6,
+            loc: 4,
+          },
+        ],
+      };
+
+      const stats = new Map<string, FileCommitStat>();
+      stats.set('src/calc.ts', {
+        commitCount: 5,
+        fixCount: 1,
+        featCount: 2,
+        refactorCount: 1,
+        linesAdded: 50,
+        linesDeleted: 10,
+        lastModifiedAt: 123456,
+        contributors: [{ name: 'Alice', commits: 5, linesAdded: 50, linesDeleted: 10, percentage: 100 }],
+        commits: [],
+      });
+
+      const { tree } = aggregator.buildTree([initialFile], stats);
+      const srcFolder = tree.children?.find((c) => c.name === 'src');
+      const fileNode = srcFolder?.children?.find((c) => c.name === 'calc.ts');
+      expect(fileNode?.children?.[0].startLine).toBe(3);
+      expect(fileNode?.commitCount).toBe(5);
+
+      // User adds lines before the method
+      const updatedParsed: ParsedFileInfo = {
+        filePath: 'src/calc.ts',
+        loc: 25,
+        fileHash: 'h2',
+        classes: [],
+        methods: [
+          {
+            name: 'add',
+            startLine: 18,
+            endLine: 21,
+            loc: 4,
+          },
+        ],
+      };
+
+      const updated = aggregator.updateFileInTree(tree, updatedParsed);
+      expect(updated.loc).toBe(25);
+      expect(updated.children?.[0].startLine).toBe(18);
+      expect(updated.children?.[0].endLine).toBe(21);
+      // Preserved commit stats
+      expect(updated.commitCount).toBe(5);
+      expect(updated.contributors?.[0].name).toBe('Alice');
+    });
+
+    it('creates standalone file node for unindexed files', () => {
+      const standalone: ParsedFileInfo = {
+        filePath: 'newFile.ts',
+        loc: 15,
+        fileHash: 'h-new',
+        classes: [],
+        methods: [
+          {
+            name: 'init',
+            startLine: 5,
+            endLine: 10,
+            loc: 6,
+          },
+        ],
+        codeHealth: 9.2,
+      };
+
+      const node = aggregator.createStandaloneFileNode(standalone);
+      expect(node.name).toBe('newFile.ts');
+      expect(node.type).toBe('file');
+      expect(node.loc).toBe(15);
+      expect(node.codeHealth).toBe(9.2);
+      expect(node.children?.[0].name).toBe('init');
+      expect(node.children?.[0].startLine).toBe(5);
+    });
+  });
 });
 

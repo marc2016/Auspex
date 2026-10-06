@@ -275,5 +275,86 @@ describe('AstStructureAnalyzer', () => {
       expect(isPathIgnored('.cache', '.cache', customPatterns)).toBe(true);
     });
   });
+
+  describe('analyzeSource', () => {
+    it('analyzes in-memory source code directly without reading disk', () => {
+      const code = [
+        'export class Calculator {',
+        '  public add(a: number, b: number): number {',
+        '    return a + b;',
+        '  }',
+        '}',
+      ].join('\n');
+
+      const parsed = analyzer.analyzeSource(code, 'src/calculator.ts');
+      expect(parsed.filePath).toBe('src/calculator.ts');
+      expect(parsed.loc).toBe(5);
+      expect(parsed.classes).toHaveLength(1);
+      expect(parsed.classes[0].name).toBe('Calculator');
+      expect(parsed.classes[0].startLine).toBe(1);
+      expect(parsed.methods).toHaveLength(1);
+      expect(parsed.methods[0].name).toBe('add()');
+      expect(parsed.methods[0].startLine).toBe(2);
+    });
+
+    it('accurately updates function line positions when lines are added before them', () => {
+      const originalCode = [
+        'function hello() {',
+        '  return "world";',
+        '}',
+      ].join('\n');
+
+      const originalParsed = analyzer.analyzeSource(originalCode, 'src/hello.ts');
+      expect(originalParsed.methods[0].startLine).toBe(1);
+
+      // User adds 5 comment/import lines at the top of the file
+      const editedCode = [
+        '// Header comment',
+        '// Created by user',
+        'import { something } from "./somewhere";',
+        '',
+        '',
+        'function hello() {',
+        '  return "world";',
+        '}',
+      ].join('\n');
+
+      const editedParsed = analyzer.analyzeSource(editedCode, 'src/hello.ts');
+      expect(editedParsed.methods[0].name).toBe('hello()');
+      expect(editedParsed.methods[0].startLine).toBe(6);
+      expect(editedParsed.methods[0].endLine).toBe(8);
+    });
+
+    it('supports multi-line function declarations and typed arrow functions', () => {
+      const multiLineCode = [
+        'export class Service {',
+        '  public calculateHealth(',
+        '    lines: string[],',
+        '    methods: string[]',
+        '  ): number {',
+        '    return 10.0;',
+        '  }',
+        '}',
+        '',
+        'export const myHandler: SomeHandlerType = (',
+        '  event: any',
+        ') => {',
+        '  return true;',
+        '};',
+      ].join('\n');
+
+      const parsed = analyzer.analyzeSource(multiLineCode, 'src/service.ts');
+      expect(parsed.classes).toHaveLength(1);
+      expect(parsed.classes[0].startLine).toBe(1);
+      expect(parsed.methods.map((m) => m.name)).toContain('calculateHealth()');
+      expect(parsed.methods.map((m) => m.name)).toContain('myHandler()');
+
+      const calcMethod = parsed.methods.find((m) => m.name === 'calculateHealth()')!;
+      expect(calcMethod.startLine).toBe(2);
+
+      const handlerMethod = parsed.methods.find((m) => m.name === 'myHandler()')!;
+      expect(handlerMethod.startLine).toBe(10);
+    });
+  });
 });
 

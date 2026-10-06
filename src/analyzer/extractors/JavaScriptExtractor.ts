@@ -69,7 +69,7 @@ export class JavaScriptExtractor implements LanguageStructureExtractor {
       },
       // const foo = (...) => or const foo = ((...) =>
       {
-        regex: /(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)\s*=\s*(?:\(\s*)?(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>/,
+        regex: /(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)(?:\s*:\s*[^=]+)?\s*=\s*(?:\(\s*)?(?:async\s*)?(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>/,
         getName: (m) => m[1],
       },
       // const foo = function(...) or const foo = (function(...)
@@ -277,6 +277,53 @@ export class JavaScriptExtractor implements LanguageStructureExtractor {
             if (candidate && !reservedKeywords.has(candidate)) {
               funcName = candidate;
               break;
+            }
+          }
+        }
+
+        const isPotentialMultiLineDeclaration =
+          !line.includes(';') &&
+          !line.includes('{') &&
+          !line.includes('=>') &&
+          (
+            /^\s*(?:export\s+)?(?:default\s+)?(?:async\s+)?function\s+([a-zA-Z0-9_$]+)\s*\(/.test(line) ||
+            /^\s*(?:export\s+)?(?:const|let|var)\s+([a-zA-Z0-9_$]+)(?:\s*:\s*[^=]+)?\s*=\s*(?:\(\s*)?(?:async\s*)?\(/.test(line) ||
+            /^\s*(?:(?:public|private|protected|static|async|get|set|readonly|override)\s+)+([a-zA-Z0-9_$]+)\s*\(/.test(line) ||
+            (insideClassOrObject && /^\s*([a-zA-Z0-9_$]+)\s*\(/.test(line) && !line.includes('='))
+          );
+
+        // Multi-line signature lookahead (e.g. multi-line parameter lists or brace on next line)
+        if (!funcName && isPotentialMultiLineDeclaration) {
+          let combinedLine = line;
+          let foundBodyStart = false;
+          for (let lookahead = 1; lookahead <= 15 && i + lookahead < lines.length; lookahead++) {
+            const nextRaw = lines[i + lookahead];
+            const nextTrimmed = nextRaw.trim();
+            if (isCommentOrEmpty(nextTrimmed)) continue;
+            if (nextTrimmed.includes(';')) {
+              break;
+            }
+            combinedLine += ' ' + nextTrimmed;
+            if (nextTrimmed.includes('{') || nextTrimmed.includes('=>')) {
+              foundBodyStart = true;
+              break;
+            }
+          }
+
+          if (foundBodyStart) {
+            for (const pattern of generalFunctionPatterns) {
+              if (pattern.isMethodShorthand && !insideClassOrObject && !combinedLine.includes('return {')) {
+                continue;
+              }
+
+              const match = combinedLine.match(pattern.regex);
+              if (match) {
+                const candidate = pattern.getName(match);
+                if (candidate && !reservedKeywords.has(candidate)) {
+                  funcName = candidate;
+                  break;
+                }
+              }
             }
           }
         }

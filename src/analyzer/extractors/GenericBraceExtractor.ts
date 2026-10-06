@@ -90,6 +90,43 @@ export class GenericBraceExtractor implements LanguageStructureExtractor {
         }
       }
 
+      const isPotentialMultiLine =
+        !line.includes(';') &&
+        !line.includes('{') &&
+        (
+          /^\s*(?:(?:public|private|protected|internal|static|final|abstract|async|override|virtual|readonly)\s+)+/.test(line) ||
+          /^\s*(?:func|fn)\s+/.test(line) ||
+          /^\s*(?:[a-zA-Z0-9_*<>[\]:]+\s+)+([a-zA-Z0-9_]+)\s*\(/.test(line)
+        );
+
+      if (!funcName && isPotentialMultiLine) {
+        let combinedLine = line;
+        let foundBodyStart = false;
+        for (let lookahead = 1; lookahead <= 15 && i + lookahead < lines.length; lookahead++) {
+          const nextRaw = lines[i + lookahead];
+          const nextTrimmed = nextRaw.trim();
+          if (isCommentOrEmpty(nextTrimmed)) continue;
+          if (nextTrimmed.includes(';')) break;
+          combinedLine += ' ' + nextTrimmed;
+          if (nextTrimmed.includes('{')) {
+            foundBodyStart = true;
+            break;
+          }
+        }
+        if (foundBodyStart) {
+          for (const pattern of functionPatterns) {
+            const match = combinedLine.match(pattern);
+            if (match && match[1]) {
+              const candidate = match[1];
+              if (!['if', 'for', 'while', 'switch', 'catch'].includes(candidate)) {
+                funcName = candidate;
+                break;
+              }
+            }
+          }
+        }
+      }
+
       if (!funcName) continue;
 
       const startLine = i + 1;
