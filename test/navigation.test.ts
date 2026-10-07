@@ -14,6 +14,12 @@ vi.mock('vscode', () => {
       showTextDocument: vi.fn(),
       showErrorMessage: vi.fn(),
     },
+    TextEditorRevealType: {
+      Default: 0,
+      InCenter: 1,
+      InCenterIfOutsideViewport: 2,
+      AtTop: 3,
+    },
     Range: vi.fn().mockImplementation((start, end) => ({ start, end })),
     Position: vi.fn().mockImplementation((line, character) => ({ line, character })),
   };
@@ -60,6 +66,28 @@ describe('openFileInEditor', () => {
 
     expect(vscode.Position).toHaveBeenCalledWith(14, 0);
     expect(vscode.Position).toHaveBeenCalledWith(24, 0);
+  });
+
+  it('includes entire end line characters when document.lineAt is available and reveals range', async () => {
+    const mockEditor = {
+      revealRange: vi.fn(),
+    };
+    const mockDoc = {
+      uri: { fsPath: '/workspace/main.ts' },
+      lineCount: 30,
+      lineAt: vi.fn().mockReturnValue({ text: '  return value; }' }), // 17 chars
+    };
+    (vscode.workspace.openTextDocument as any).mockResolvedValue(mockDoc);
+    (vscode.window.showTextDocument as any).mockResolvedValue(mockEditor);
+
+    await openFileInEditor('/workspace', 'main.ts', 10, 20);
+
+    expect(vscode.Position).toHaveBeenCalledWith(9, 0);
+    expect(vscode.Position).toHaveBeenCalledWith(19, 17);
+    expect(mockEditor.revealRange).toHaveBeenCalledWith(
+      expect.anything(),
+      vscode.TextEditorRevealType.InCenterIfOutsideViewport
+    );
   });
 
   it('shows error message and logs error when document fails to open', async () => {

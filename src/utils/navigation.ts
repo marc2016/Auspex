@@ -17,18 +17,32 @@ export async function openFileInEditor(
     const document = await vscode.workspace.openTextDocument(uri);
 
     const line = Math.max((startLine ?? 1) - 1, 0);
-    const end = Math.max((endLine ?? startLine ?? 1) - 1, line);
+    const rawEnd = Math.max((endLine ?? startLine ?? 1) - 1, line);
+    const end = document.lineCount ? Math.min(rawEnd, document.lineCount - 1) : rawEnd;
+
+    const endChar =
+      typeof (document as any).lineAt === 'function'
+        ? (document as any).lineAt(end).text.length
+        : 0;
 
     const selection = new vscode.Range(
       new vscode.Position(line, 0),
-      new vscode.Position(end, 0)
+      new vscode.Position(end, endChar)
     );
 
-    await vscode.window.showTextDocument(document, {
+    const editor = await vscode.window.showTextDocument(document, {
       selection,
       preview: true,
       preserveFocus: false,
     });
+
+    if (editor && typeof editor.revealRange === 'function') {
+      const revealType =
+        vscode.TextEditorRevealType?.InCenterIfOutsideViewport ??
+        vscode.TextEditorRevealType?.InCenter ??
+        2;
+      editor.revealRange(selection, revealType);
+    }
   } catch (err) {
     const t = EXT_STRINGS[resolveLanguage()];
     vscode.window.showErrorMessage(t.fileOpenError(relativeOrAbsolutePath));
