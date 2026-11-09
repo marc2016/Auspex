@@ -21,7 +21,9 @@ Delivered in two stages:
 
 **Call data (shared by both stages)**
 - Hybrid resolution: VS Code's Call Hierarchy API (language servers) for ES modules, CommonJS and other languages; an Auspex resolver for JavaScript AMD modules (`define([...], function (...) {})` parameter-to-module mapping), `this.x()` and `self.x()` calls.
-- Every edge carries a confidence (`certain` / `inferred`).
+- Edges come from pluggable **edge sources** (initially: language server, Auspex JS resolver). New sources can be added without changing the core call model or the views.
+- Every edge carries a confidence (`certain` / `inferred`) and its source kind (e.g. `js`, `declarative`).
+- A caller is either a known function or a location in a non-code file (file + line), so that declarative references (e.g. XML attributes naming JS handlers, see `detect-declarative-references`) can appear as callers with their own icon.
 - Results are cached per file hash and computed incrementally; the initial computation runs in the background with progress.
 
 **Open / to be validated**
@@ -41,6 +43,7 @@ Delivered in two stages:
 ## Impact
 
 - Depends on `detect-this-assigned-methods` so that `this`-assigned methods exist as graph nodes.
+- `detect-declarative-references` builds on the edge-source model defined here and can be implemented after Stage 1.
 - New analyzer module (pipeline step) under `src/analyzer/`, new resolver for AMD/`this` calls, extension of `src/storage/cache.ts`.
 - New provider `src/providers/CallsViewProvider.ts`, view contribution and commands in `package.json` (+ `package.nls*.json`), CodeLens extension in `src/editor/HealthCodeLensProvider.ts`.
 - Webview: new call tree component, new `callGraph` chart type based on `CouplingGraphViewer`.
