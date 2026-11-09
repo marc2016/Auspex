@@ -30,6 +30,8 @@ export const EXT_STRINGS = {
     scanNotificationTitle: 'Auspex: Workspace wird analysiert',
     callAnalysisProgressTitle: 'Auspex: Aufrufe über Language Server ermitteln',
     callDiagramTitle: 'Aufrufdiagramm',
+    noFunctionAtCursor: 'Auspex: An dieser Stelle wurde keine bekannte Funktion gefunden.',
+    inDiagramLens: 'Im Diagramm',
     callCountLens: (callers: number, callees: number) => `${callers} Aufrufer | ${callees} Aufrufe`,
     declarativeReport: {
       title: 'Auspex: Verweise in XML-Dateien (auspex.declarativeReferences)',
@@ -115,6 +117,8 @@ export const EXT_STRINGS = {
     scanNotificationTitle: 'Auspex: Analyzing Workspace',
     callAnalysisProgressTitle: 'Auspex: Finding calls via language servers',
     callDiagramTitle: 'Call Diagram',
+    noFunctionAtCursor: 'Auspex: No known function found at the cursor.',
+    inDiagramLens: 'In diagram',
     declarativeReport: {
       title: 'Auspex: References in XML files (auspex.declarativeReferences)',
       warnings: 'Rule warnings:',

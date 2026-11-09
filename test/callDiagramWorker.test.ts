@@ -77,3 +77,49 @@ describe('createLayoutRunner', () => {
     expect(quiet).not.toHaveBeenCalled();
   });
 });
+
+describe('focus requests', () => {
+  const chainFiles = [
+    parseJsWithCalls('src/ui/ui.js', ['function onSubmit() {', '  saveOrder();', '}', 'function saveOrder() {', '  add();', '}']),
+    parseJsWithCalls('src/cart/cart.js', ['function add() {', '  persist();', '}', 'function unrelated() {', '  return 0;', '}']),
+    parseJsWithCalls('src/store/store.js', ['function persist() {', '  writeFile();', '}', 'function writeFile() {', '  return 1;', '}']),
+  ];
+  const t = new TreeAggregator().buildTree(chainFiles, new Map());
+  const snap: AnalysisSnapshot = {
+    id: '1', workspacePath: '/ws', headCommitSha: '', totalFiles: 3, totalLoc: 0, durationMs: 0, scannedAt: '',
+    tree: t.tree, hotspots: t.hotspots, callGraph: new CallGraphBuilder().build(chainFiles),
+  };
+  const wsData = buildCallDiagramData(snap, '');
+
+  it('lays out only the focus, callers above callees, with boundary counts', async () => {
+    const messages: DiagramResponse[] = [];
+    await handleDiagramRequest(
+      { requestId: 1, data: wsData, focus: { fnId: 'src/cart/cart.js#add', up: 1, down: 1, includeInferred: true } },
+      (m) => messages.push(m),
+      elk
+    );
+    const result = messages.at(-1);
+    if (result?.type !== 'result' || !result.layout) throw new Error('no layout');
+    const fns = result.layout.nodes.filter((n) => n.kind === 'function');
+    expect(fns.map((n) => n.key).sort()).toEqual(['src/cart/cart.js#add', 'src/store/store.js#persist', 'src/ui/ui.js#saveOrder']);
+    const y = (k: string) => fns.find((n) => n.key === k)!.y0;
+    expect(y('src/ui/ui.js#saveOrder')).toBeLessThan(y('src/cart/cart.js#add'));
+    expect(y('src/cart/cart.js#add')).toBeLessThan(y('src/store/store.js#persist'));
+    expect(result.layout.boundary).toEqual({
+      'src/ui/ui.js#saveOrder': { hiddenCallers: 1, hiddenCallees: 0 },
+      'src/store/store.js#persist': { hiddenCallers: 0, hiddenCallees: 1 },
+    });
+    expect(result.layout.focusSize).toBe(3);
+  });
+
+  it('treats a null depth (Infinity after JSON transport) as all', async () => {
+    const messages: DiagramResponse[] = [];
+    await handleDiagramRequest(
+      { requestId: 2, data: wsData, focus: { fnId: 'src/cart/cart.js#add', up: null as any, down: 0, includeInferred: true } },
+      (m) => messages.push(m),
+      elk
+    );
+    const result = messages.at(-1);
+    expect(result?.type === 'result' && result.layout?.focusSize).toBe(3);
+  });
+});

@@ -137,3 +137,45 @@ describe('buildCallDiagramData', () => {
     expect(buildCallDiagramData(null, '').tree).toBeNull();
   });
 });
+
+describe('CallDiagramPanel focus', () => {
+  beforeEach(() => {
+    for (const p of [...CallDiagramPanel.instances]) p.dispose();
+    panels.length = 0;
+  });
+
+  it('opens a focused tab titled with the function and sends focus and workspace data on ready', async () => {
+    CallDiagramPanel.open({ fsPath: '/ext' } as any, '/ws/shop', 'src/cart', snapshot, {}, { fnId: 'src/cart/cart.js#save', label: 'save' });
+    expect(panels[0].title).toBe('Call Diagram: save');
+    await panels[0].onMessage({ type: 'ready' });
+    const types = panels[0].webview.postMessage.mock.calls.map((c: any[]) => c[0].type);
+    expect(types).toEqual(['language:set', 'diagram:data', 'diagram:focusData', 'diagram:focus']);
+    const focusData = panels[0].webview.postMessage.mock.calls.find((c: any[]) => c[0].type === 'diagram:focusData')[0].payload;
+    // workspace-wide: contains functions outside the tab's folder scope
+    expect(focusData.callGraph.functions.map((f: any) => f.id)).toContain('src/other/x.js#x');
+  });
+
+  it('sends workspace data only for focused tabs, also on snapshot updates', async () => {
+    CallDiagramPanel.open({ fsPath: '/ext' } as any, '/ws/shop', 'src/cart', snapshot);
+    await panels[0].onMessage({ type: 'ready' });
+    CallDiagramPanel.broadcastSnapshot(snapshot);
+    let types = panels[0].webview.postMessage.mock.calls.map((c: any[]) => c[0].type);
+    expect(types).not.toContain('diagram:focusData');
+
+    await panels[0].onMessage({ type: 'requestFocusData' });
+    CallDiagramPanel.broadcastSnapshot(snapshot);
+    types = panels[0].webview.postMessage.mock.calls.map((c: any[]) => c[0].type);
+    expect(types.filter((t: string) => t === 'diagram:focusData')).toHaveLength(2);
+
+    await panels[0].onMessage({ type: 'focusClosed' });
+    panels[0].webview.postMessage.mockClear();
+    CallDiagramPanel.broadcastSnapshot(snapshot);
+    expect(panels[0].webview.postMessage.mock.calls.map((c: any[]) => c[0].type)).toEqual(['diagram:data']);
+  });
+
+  it('opens a focused diagram for a focus request from the webview', async () => {
+    CallDiagramPanel.open({ fsPath: '/ext' } as any, '/ws/shop', '', snapshot);
+    await panels[0].onMessage({ type: 'openCallDiagram', focus: { file: 'src/cart/cart.js', startLine: 1 } });
+    expect(executeCommand).toHaveBeenCalledWith('auspex.openCallDiagram', { focus: { file: 'src/cart/cart.js', startLine: 1 } });
+  });
+});

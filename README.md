@@ -81,6 +81,7 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
 - Zoom levels: zoomed out you see frames and aggregated edges with call counts, zooming in reveals functions and their names.
 - Click a function to highlight its callers and callees (and select it in the other Auspex views), double-click to open it in the editor.
 - Filters: hide inferred edges, show only hotspots, restrict to a folder. The diagram updates automatically after scans and saves, keeping zoom and selection.
+- **Focus on a function**: select a function and click **Focus** (or use the diagram button in the Calls view, the **In diagram** CodeLens, or *Auspex: Show Calls in Diagram* in the editor context menu). The diagram then shows only the callers above and the callees below that function, with separate depths (0-10 or all, default 2/2). Functions with more callers or callees beyond the depth show "+N", and a warning appears above 300 functions.
 
 ### 🧩 References from XML Files
 - JavaScript handlers referenced in XML-based files of your own formats (any file extension) appear as **callers** in the Calls view and count towards the call CodeLens.
@@ -176,6 +177,7 @@ Auspex contributes the following commands to the VS Code Command Palette:
 | `Auspex: Rescan Workspace` | `auspex.rescan` | Triggers a fresh analysis of AST and Git history. |
 | `Auspex: Focus Details View` | `auspex.focusDetailsView` | Reveals the Auspex sidebar details panel. |
 | `Auspex: Open Call Diagram` | `auspex.openCallDiagram` | Opens a call diagram editor tab for the workspace (or a folder). |
+| `Auspex: Show Calls in Diagram` | `auspex.focusInCallDiagram` | Opens a call diagram focused on the function at the cursor (also in the editor context menu). |
 | `Auspex: Show Calls` | `auspex.showCalls` | Shows a function in the Calls view (used by the call count CodeLens). |
 | `Auspex: Open Guide & Documentation` | `auspex.openHelp` | Opens the built-in Auspex user guide and documentation. |
 | `Auspex: Set Jira API Token` | `auspex.setJiraToken` | Safely saves your Jira API token in the OS Keychain. |

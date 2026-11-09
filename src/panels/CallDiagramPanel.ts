@@ -6,6 +6,13 @@ import { buildCallDiagramData, normalizeScopePath } from '../analyzer/calls/diag
 import { openFileInEditor } from '../utils/navigation';
 import { resolveLanguage, EXT_STRINGS } from '../i18n';
 
+/** Function a tab is focused on when it opens. */
+export interface CallDiagramFocusTarget {
+  fnId: string;
+  /** Qualified function name, shown in the title and focus bar. */
+  label: string;
+}
+
 export interface CallDiagramCallbacks {
   /** A function box was selected in the diagram (file + start line). */
   onFunctionSelected?: (filePath: string, startLine: number) => void;
@@ -27,12 +34,13 @@ export class CallDiagramPanel {
     workspacePath: string,
     scopePath: string,
     snapshot: AnalysisSnapshot | null,
-    callbacks: CallDiagramCallbacks = {}
+    callbacks: CallDiagramCallbacks = {},
+    focus?: CallDiagramFocusTarget
   ): CallDiagramPanel {
     const scope = normalizeScopePath(scopePath);
     const panel = vscode.window.createWebviewPanel(
       CallDiagramPanel.viewType,
-      CallDiagramPanel.titleFor(workspacePath, scope),
+      focus ? CallDiagramPanel.titleForFocus(focus.label) : CallDiagramPanel.titleFor(workspacePath, scope),
       vscode.window.activeTextEditor?.viewColumn ?? vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -43,7 +51,7 @@ export class CallDiagramPanel {
         ],
       }
     );
-    const instance = new CallDiagramPanel(panel, extensionUri, workspacePath, scope, snapshot, callbacks);
+    const instance = new CallDiagramPanel(panel, extensionUri, workspacePath, scope, snapshot, callbacks, focus);
     CallDiagramPanel.instances.add(instance);
     return instance;
   }
@@ -58,13 +66,21 @@ export class CallDiagramPanel {
     return `${t.callDiagramTitle}: ${scope || path.basename(workspacePath)}`;
   }
 
+  public static titleForFocus(label: string): string {
+    return `${EXT_STRINGS[resolveLanguage()].callDiagramTitle}: ${label}`;
+  }
+
+  /** Whether the webview is in focus mode (needs workspace-wide data). */
+  private _focused = false;
+
   private constructor(
     private readonly _panel: vscode.WebviewPanel,
     private readonly _extensionUri: vscode.Uri,
     private readonly _workspacePath: string,
     public readonly scopePath: string,
     snapshot: AnalysisSnapshot | null,
-    private readonly _callbacks: CallDiagramCallbacks
+    private readonly _callbacks: CallDiagramCallbacks,
+    private readonly _initialFocus?: CallDiagramFocusTarget
   ) {
     this._snapshot = snapshot;
     this._panel.webview.html = this._getHtml(this._panel.webview);
@@ -79,6 +95,13 @@ export class CallDiagramPanel {
   public sendSnapshot(snapshot: AnalysisSnapshot): void {
     this._snapshot = snapshot;
     this._panel.webview.postMessage({ type: 'diagram:data', payload: buildCallDiagramData(snapshot, this.scopePath) });
+    if (this._focused) this.sendFocusData();
+  }
+
+  /** Workspace-wide data for focus mode (the traversal may leave the tab's folder scope). */
+  private sendFocusData(): void {
+    if (!this._snapshot) return;
+    this._panel.webview.postMessage({ type: 'diagram:focusData', payload: buildCallDiagramData(this._snapshot, '') });
   }
 
   /** Handles messages from the webview (exposed for tests). */
@@ -86,8 +109,19 @@ export class CallDiagramPanel {
     switch (message?.type) {
       case 'ready':
         this._panel.webview.postMessage({ type: 'language:set', payload: resolveLanguage() });
+        if (this._initialFocus) this._focused = true;
         if (this._snapshot) this.sendSnapshot(this._snapshot);
         else this._callbacks.onScanRequested?.();
+        if (this._initialFocus) {
+          this._panel.webview.postMessage({ type: 'diagram:focus', payload: this._initialFocus });
+        }
+        break;
+      case 'requestFocusData':
+        this._focused = true;
+        this.sendFocusData();
+        break;
+      case 'focusClosed':
+        this._focused = false;
         break;
       case 'functionSelected':
         if (typeof message.filePath === 'string' && typeof message.startLine === 'number') {
@@ -98,7 +132,7 @@ export class CallDiagramPanel {
         await openFileInEditor(this._workspacePath, message.filePath, message.startLine, message.endLine);
         break;
       case 'openCallDiagram':
-        await vscode.commands.executeCommand('auspex.openCallDiagram', message.scopePath ?? '');
+        await vscode.commands.executeCommand('auspex.openCallDiagram', message.focus ? { focus: message.focus } : message.scopePath ?? '');
         break;
     }
   }

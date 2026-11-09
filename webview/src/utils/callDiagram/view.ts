@@ -1,4 +1,6 @@
 import type { DiagramLayout, LaidOutNode, RoutedEdge } from './layout';
+import type { DiagramRequest } from './protocol';
+import type { CallDiagramData } from '../../../../src/analyzer/calls/diagramData';
 import { getHeatColor } from '../../components/TreemapViewer';
 import { getCodeHealthColor } from '../../components/SystemMapViewer';
 
@@ -154,4 +156,58 @@ export function folderOptions(layout: DiagramLayout | null): { path: string; nam
     .filter((n) => n.kind === 'folder' && n.data.folderPath)
     .map((n) => ({ path: n.data.folderPath!, name: n.data.folderPath! }))
     .sort((a, b) => a.path.localeCompare(b.path));
+}
+
+// ---- focus mode -------------------------------------------------------------------------------
+
+export type FocusDepthOption = number | 'all';
+/** Depth choices of the focus bar: 0-10 or all. */
+export const FOCUS_DEPTH_OPTIONS: FocusDepthOption[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 'all'];
+export const FOCUS_DEFAULT_DEPTH: FocusDepthOption = 2;
+export const FOCUS_LARGE_THRESHOLD = 300;
+
+export const depthToNumber = (d: FocusDepthOption): number => (d === 'all' ? Infinity : d);
+
+export interface DiagramFocus {
+  fnId: string;
+  label: string;
+  up: FocusDepthOption;
+  down: FocusDepthOption;
+}
+
+/** True if a focus contains so many functions that a lower depth should be suggested. */
+export function isLargeFocus(size: number | undefined): boolean {
+  return (size ?? 0) > FOCUS_LARGE_THRESHOLD;
+}
+
+/** Display label of a function: its qualified name if known. */
+export function functionLabel(data: CallDiagramData | null, fnId: string): string {
+  return data?.callGraph.functions.find((f) => f.id === fnId)?.qualifiedName ?? fnId.split('#').pop() ?? fnId;
+}
+
+/**
+ * Layout request for the current view state: the focus (on workspace-wide data) or the scope view
+ * (with optional folder restriction). Undefined while required data is missing.
+ */
+export function layoutRequestFor(state: {
+  data: CallDiagramData | null;
+  focusData: CallDiagramData | null;
+  folderPath: string;
+  focus: DiagramFocus | null;
+  hideInferred: boolean;
+}): Omit<DiagramRequest, 'requestId'> | undefined {
+  if (state.focus) {
+    if (!state.focusData) return undefined;
+    return {
+      data: state.focusData,
+      focus: {
+        fnId: state.focus.fnId,
+        up: depthToNumber(state.focus.up),
+        down: depthToNumber(state.focus.down),
+        includeInferred: !state.hideInferred,
+      },
+    };
+  }
+  if (!state.data) return undefined;
+  return { data: state.data, folderPath: state.folderPath || undefined };
 }

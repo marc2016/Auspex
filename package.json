@@ -61,6 +61,10 @@
         "icon": "$(type-hierarchy)"
       },
       {
+        "command": "auspex.focusInCallDiagram",
+        "title": "%command.focusInCallDiagram%"
+      },
+      {
         "command": "auspex.setJiraToken",
         "title": "%command.setJiraToken%",
         "icon": "$(key)"
@@ -87,6 +91,13 @@
       }
     ],
     "menus": {
+      "editor/context": [
+        {
+          "command": "auspex.focusInCallDiagram",
+          "when": "resourceLangId =~ /^(javascript|typescript|javascriptreact|typescriptreact)$/",
+          "group": "navigation@90"
+        }
+      ],
       "editor/title": [
         {
           "command": "auspex.toggleEditorHealth",

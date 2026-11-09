@@ -353,6 +353,15 @@ describe('HealthCodeLensProvider', () => {
       expect(lookup).toHaveBeenCalledWith('src/cart.js', 2, 4);
     });
 
+    it('adds an "In diagram" lens that opens a focused call diagram', () => {
+      const callProvider = new HealthCodeLensProvider('/workspace', () => ({ callers: 1, callees: 0 }));
+      callProvider.updateTree(buildTree());
+      const lenses = callProvider.provideCodeLenses(doc, {} as any) as any[];
+      const diagramLens = lenses.find((l) => l.command.command === 'auspex.openCallDiagram');
+      expect(diagramLens.command.title).toBe('In diagram');
+      expect(diagramLens.command.arguments).toEqual([{ focus: { file: 'src/cart.js', startLine: 2 } }]);
+    });
+
     it('shows no call count lens when CodeLens is disabled', () => {
       mockCodeLensConfig.enabled = false;
       const callProvider = new HealthCodeLensProvider('/workspace', () => ({ callers: 1, callees: 1 }));

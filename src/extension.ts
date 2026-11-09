@@ -27,7 +27,8 @@ import { updateCallGraphForFile } from './analyzer/calls/incremental';
 import { CallGraphService, type LanguageServerMode } from './analyzer/calls/callGraphService';
 import { LspCallSource } from './integrations/callHierarchy/lspCallSource';
 import { AuspexCallsViewProvider } from './providers/CallsViewProvider';
-import { CallDiagramPanel } from './panels/CallDiagramPanel';
+import { CallDiagramPanel, type CallDiagramFocusTarget } from './panels/CallDiagramPanel';
+import { focusTargetAt, parseOpenCallDiagramArg } from './analyzer/calls/focus';
 import { formatDeclarativeReport, hasDeclarativeReport } from './analyzer/declarative/report';
 
 let pipeline: AuspexPipeline;
@@ -324,22 +325,49 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  const openCallDiagramTab = (scopePath: string, focus?: CallDiagramFocusTarget) =>
+    CallDiagramPanel.open(
+      context.extensionUri,
+      workspacePath,
+      scopePath,
+      latestSnapshot,
+      {
+        onFunctionSelected: (filePath, startLine) => {
+          const fileNode = latestSnapshot?.tree ? findFileNode(latestSnapshot.tree, filePath) : null;
+          const node = fileNode ? findMethodNodeAt(fileNode, startLine) : null;
+          if (node) setSelectedNodeAcrossProviders(node, false);
+        },
+        onScanRequested: () => void runScan(context, workspacePath, true),
+      },
+      focus
+    );
+
   context.subscriptions.push(
-    vscode.commands.registerCommand('auspex.openCallDiagram', (scopePath?: unknown) => {
-      CallDiagramPanel.open(
-        context.extensionUri,
-        workspacePath,
-        typeof scopePath === 'string' ? scopePath : '',
-        latestSnapshot,
-        {
-          onFunctionSelected: (filePath, startLine) => {
-            const fileNode = latestSnapshot?.tree ? findFileNode(latestSnapshot.tree, filePath) : null;
-            const node = fileNode ? findMethodNodeAt(fileNode, startLine) : null;
-            if (node) setSelectedNodeAcrossProviders(node, false);
-          },
-          onScanRequested: () => void runScan(context, workspacePath, true),
+    vscode.commands.registerCommand('auspex.openCallDiagram', (arg?: unknown) => {
+      const options = parseOpenCallDiagramArg(arg);
+      let focus: CallDiagramFocusTarget | undefined;
+      if (options.focus) {
+        focus = focusTargetAt(callGraphService, options.focus.file, options.focus.startLine);
+        if (!focus) {
+          void vscode.window.showInformationMessage(EXT_STRINGS[resolveLanguage()].noFunctionAtCursor);
+          return;
         }
-      );
+      }
+      openCallDiagramTab(options.scopePath, focus);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('auspex.focusInCallDiagram', () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.uri.scheme !== 'file') return;
+      const relPath = path.relative(workspacePath, editor.document.uri.fsPath).replace(/\\/g, '/');
+      const focus = focusTargetAt(callGraphService, relPath, editor.selection.active.line + 1);
+      if (!focus) {
+        void vscode.window.showInformationMessage(EXT_STRINGS[resolveLanguage()].noFunctionAtCursor);
+        return;
+      }
+      openCallDiagramTab('', focus);
     })
   );
 

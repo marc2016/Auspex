@@ -5,7 +5,7 @@ import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
 import { getCodeHealthColor } from './SystemMapViewer';
 import { getHeatColor } from './TreemapViewer';
-import { buildCallTreeRows, folderOfFile, type ChildrenState } from '../utils/callTree';
+import { buildCallTreeRows, type ChildrenState } from '../utils/callTree';
 
 interface VsCodeLike {
   postMessage(message: unknown): void;
@@ -73,7 +73,7 @@ export const CallsPanel: React.FC<Props> = ({ language, vscode }) => {
   };
 
   const openDiagram = (entry: CallEntry) =>
-    vscode.postMessage({ type: 'openCallDiagram', scopePath: folderOfFile(entry.file) });
+    vscode.postMessage({ type: 'openCallDiagram', focus: { file: entry.file, startLine: entry.line } });
 
   const open = (entry: CallEntry) =>
     vscode.postMessage({ type: 'openFile', filePath: entry.file, startLine: entry.line, endLine: entry.endLine ?? entry.line });

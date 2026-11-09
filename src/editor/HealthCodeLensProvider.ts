@@ -112,6 +112,14 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
               tooltip: t.viewTitles.calls,
             })
           );
+          lenses.push(
+            new vscode.CodeLens(range, {
+              title: t.inDiagramLens,
+              command: 'auspex.openCallDiagram',
+              arguments: [{ focus: { file: normPath, startLine } }],
+              tooltip: t.callDiagramTitle,
+            })
+          );
         }
       }
     }

@@ -5,6 +5,7 @@
   "command.focusDetailsView": "Auspex: Focus Details View",
   "command.showCalls": "Auspex: Show Calls",
   "command.openCallDiagram": "Auspex: Open Call Diagram",
+  "command.focusInCallDiagram": "Auspex: Show Calls in Diagram",
   "command.setJiraToken": "Auspex: Set Jira API Token",
   "command.clearJiraToken": "Auspex: Clear Jira API Token",
   "command.testJiraConnection": "Auspex: Test Jira Connection",

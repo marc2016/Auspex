@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const executeCommand = vi.fn();
+
 vi.mock('vscode', () => ({
+  commands: { executeCommand: (...a: any[]) => executeCommand(...a) },
   Uri: {
     file: vi.fn((p: string) => ({ fsPath: p })),
     joinPath: vi.fn((base: any, ...segments: string[]) => ({ fsPath: [base.fsPath, ...segments].join('/') })),
@@ -143,6 +146,11 @@ describe('AuspexCallsViewProvider', () => {
     await vi.waitFor(() => expect(lastState().lspLoading).toBe(false));
     expect(lastState().outgoing).toHaveLength(1);
     expect(lastState().nameOnly).toBe(true);
+  });
+
+  it('opens a focused call diagram for the subject', async () => {
+    await provider.handleMessage({ type: 'openCallDiagram', focus: { file: 'src/cart.js', startLine: 2 } });
+    expect(executeCommand).toHaveBeenCalledWith('auspex.openCallDiagram', { focus: { file: 'src/cart.js', startLine: 2 } });
   });
 
   it('does not query the language server when it is turned off', () => {

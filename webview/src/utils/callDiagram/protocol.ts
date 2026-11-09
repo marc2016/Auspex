@@ -1,6 +1,7 @@
 import type { CallDiagramData } from '../../../../src/analyzer/calls/diagramData';
 import { findFolderNode } from '../../../../src/analyzer/calls/diagramData';
 import { buildDiagramModel } from './model';
+import { computeFocus, type FocusResult } from '../../../../src/analyzer/calls/focus';
 import { computeDiagramLayout, type DiagramLayout, type ElkLike } from './layout';
 
 export interface DiagramRequest {
@@ -8,6 +9,8 @@ export interface DiagramRequest {
   data: CallDiagramData;
   /** Optional folder restriction within the tab's scope (workspace-relative). */
   folderPath?: string;
+  /** Focus mode: neighborhood of one function (data must be workspace-wide). */
+  focus?: { fnId: string; up: number; down: number; includeInferred: boolean };
 }
 
 export type DiagramStage = 'model' | 'layout' | 'edges';
@@ -32,14 +35,29 @@ export async function handleDiagramRequest(
 ): Promise<void> {
   try {
     post({ requestId: req.requestId, type: 'progress', stage: 'model' });
-    const data = restrictToFolder(req.data, req.folderPath);
-    const model = buildDiagramModel(data);
+    let data = restrictToFolder(req.data, req.folderPath);
+    let focus: FocusResult | undefined;
+    if (req.focus) {
+      // JSON transport turns Infinity into null: null means "all"
+      const depth = (d: number | null) => (d === null || d === undefined ? Infinity : d);
+      focus = computeFocus(req.data.callGraph, req.focus.fnId, {
+        up: depth(req.focus.up),
+        down: depth(req.focus.down),
+        includeInferred: req.focus.includeInferred,
+      });
+      data = { ...req.data, callGraph: { ...req.data.callGraph, edges: focus.edges } };
+    }
+    const model = buildDiagramModel(data, focus ? { functions: focus.functions } : {});
     if (!model) {
       post({ requestId: req.requestId, type: 'result', layout: null });
       return;
     }
     post({ requestId: req.requestId, type: 'progress', stage: 'layout' });
     const layout = await computeDiagramLayout(data, model, elk);
+    if (focus) {
+      layout.boundary = focus.boundary;
+      layout.focusSize = focus.functions.size;
+    }
     post({ requestId: req.requestId, type: 'result', layout });
   } catch (err) {
     post({ requestId: req.requestId, type: 'error', message: err instanceof Error ? err.message : String(err) });

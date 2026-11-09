@@ -25,7 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Color by churn or Code Health, inferred and XML references styled distinctly, out-of-scope calls as counts.
   - Zoom levels from frames with aggregated edges to labeled functions; selection highlights callers/callees, double-click opens the source.
   - Filters (hide inferred edges, hotspots only, folder) and automatic updates after scans and saves; layout computed in a Web Worker (new dependency `elkjs`).
-  - Entry points: "Open call diagram for folder" in the details view and a diagram button in the Calls view.
+  - Entry points: "Open call diagram for folder" in the details view.
+  - **Focus mode**: show only the callers (upwards) and callees (downwards) of one function with separate depths (0-10 or all), "+N" markers for calls beyond the depth and a warning above 300 functions; started from the diagram, the Calls view, an "In diagram" CodeLens or the editor context menu (`auspex.focusInCallDiagram`).
 - **References from XML Files**:
   - New setting `auspex.declarativeReferences` with rules for XML-based files of any extension (attributes, element text, file/function attribute pairs).
   - References (names, `Container.method`, JS expressions, file/function pairs) become callers in the Calls view and count towards the call CodeLens; ambiguous names are marked as inferred.

@@ -44,6 +44,10 @@ export interface DiagramLayout {
   edges: RoutedEdge[];
   /** Out-of-scope callees per function key. */
   stubs: Record<string, number>;
+  /** Focus mode: hidden callers/callees of functions at the depth limit. */
+  boundary?: Record<string, { hiddenCallers: number; hiddenCallees: number }>;
+  /** Focus mode: number of functions in the focus. */
+  focusSize?: number;
 }
 
 /** Size of a function node: wide enough for its name, height grows moderately with LOC. */

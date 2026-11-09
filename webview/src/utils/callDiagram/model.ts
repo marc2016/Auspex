@@ -32,7 +32,10 @@ const normPath = (p: string) => p.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
  * flattened into the frame of their top-level method. Frames without functions are dropped unless
  * they are files referencing functions (declarative location callers).
  */
-export function buildDiagramModel(data: CallDiagramData): DiagramNode | null {
+export function buildDiagramModel(
+  data: CallDiagramData,
+  options: { functions?: Set<string> } = {}
+): DiagramNode | null {
   if (!data.tree) return null;
   const fnByLocation = new Map<string, CallFunctionRef>();
   for (const fn of data.callGraph.functions) fnByLocation.set(`${fn.file}:${fn.startLine}:${fn.endLine}`, fn);
@@ -48,6 +51,10 @@ export function buildDiagramModel(data: CallDiagramData): DiagramNode | null {
     const visit = (m: TreeNode) => {
       if (m.type === 'method') {
         const fn = fnByLocation.get(`${file}:${m.startLine}:${m.endLine}`);
+        if (options.functions && (!fn || !options.functions.has(fn.id))) {
+          m.children?.forEach(visit);
+          return;
+        }
         leaves.push({
           key: fn?.id ?? `${file}#${m.name}@${m.startLine}`,
           kind: 'function',

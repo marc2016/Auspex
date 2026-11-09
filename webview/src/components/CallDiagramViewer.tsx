@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { mdiFitToScreenOutline } from '@mdi/js';
+import { mdiFitToScreenOutline, mdiTarget, mdiClose } from '@mdi/js';
 import type { CallDiagramData } from '../../../src/analyzer/calls/diagramData';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
@@ -20,7 +20,14 @@ import {
   restoreSelection,
   zoomBand,
   ZOOM_FAR,
+  FOCUS_DEFAULT_DEPTH,
+  FOCUS_DEPTH_OPTIONS,
+  functionLabel,
+  isLargeFocus,
+  layoutRequestFor,
   type DiagramColorMode,
+  type DiagramFocus,
+  type FocusDepthOption,
 } from '../utils/callDiagram/view';
 import { createElk } from '../utils/callDiagram/elkFactory';
 
@@ -106,6 +113,9 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   const [k, setK] = useState(1);
   const [viewport, setViewport] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [allFolders, setAllFolders] = useState<{ path: string; name: string }[]>([]);
+  const [focus, setFocus] = useState<DiagramFocus | null>(null);
+  const [focusData, setFocusData] = useState<CallDiagramData | null>(null);
+  const focusDataRequested = useRef(false);
 
   // Layout runner (ELK in its own worker, main-thread fallback)
   useEffect(() => {
@@ -132,24 +142,55 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   // Messages from the extension
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'diagram:data') setData(event.data.payload as CallDiagramData);
+      const msg = event.data;
+      if (msg?.type === 'diagram:data') setData(msg.payload as CallDiagramData);
+      else if (msg?.type === 'diagram:focusData') setFocusData(msg.payload as CallDiagramData);
+      else if (msg?.type === 'diagram:focus' && msg.payload?.fnId) {
+        setFocus({ fnId: msg.payload.fnId, label: msg.payload.label ?? msg.payload.fnId, up: FOCUS_DEFAULT_DEPTH, down: FOCUS_DEFAULT_DEPTH });
+      }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, []);
 
-  // (Re-)layout on new data or folder restriction; keeps zoom, filters and selection
+  // In focus mode, the traversal depends on the inferred-edge filter; in the scope view it does not
+  const focusKey = focus ? `${focus.fnId}|${focus.up}|${focus.down}|${hideInferred}` : '';
+
+  // (Re-)layout on new data, folder restriction or focus; keeps zoom, filters and selection
   useEffect(() => {
-    if (!data || !runnerRef.current) return;
+    if (!runnerRef.current) return;
+    if (focus && !focusData && !focusDataRequested.current) {
+      focusDataRequested.current = true;
+      vscode.postMessage({ type: 'requestFocusData' });
+    }
+    const req = layoutRequestFor({ data, focusData, folderPath, focus, hideInferred });
+    if (!req) return;
     const requestId = ++requestRef.current;
     setStage('model');
-    runnerRef.current.request({ requestId, data, folderPath: folderPath || undefined });
-  }, [data, folderPath]);
+    runnerRef.current.request({ requestId, ...req });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, focusData, folderPath, focusKey]);
+
+  // Re-fit when entering or leaving focus or switching the focused function
+  useEffect(() => {
+    fittedRef.current = false;
+  }, [focus?.fnId]);
+
+  const enterFocus = (fnId: string) =>
+    setFocus({ fnId, label: functionLabel(focusData ?? data, fnId), up: FOCUS_DEFAULT_DEPTH, down: FOCUS_DEFAULT_DEPTH });
+  const leaveFocus = () => {
+    setFocus(null);
+    focusDataRequested.current = false;
+    setFocusData(null);
+    vscode.postMessage({ type: 'focusClosed' });
+  };
+  const setDepth = (which: 'up' | 'down', value: string) =>
+    setFocus((f) => (f ? { ...f, [which]: value === 'all' ? 'all' : Number(value) } : f));
 
   // Folder list from the unrestricted layout
   useEffect(() => {
-    if (layout && !folderPath) setAllFolders(folderOptions(layout));
-  }, [layout, folderPath]);
+    if (layout && !folderPath && !focus) setAllFolders(folderOptions(layout));
+  }, [layout, folderPath, focus]);
 
   const updateViewport = useCallback(() => {
     const el = containerRef.current;
@@ -187,13 +228,13 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     d3.select(svgRef.current).call(zoom).on('dblclick.zoom', null);
   }, [updateViewport]);
 
-  // Fit once when the first layout arrives
+  // Fit when the first layout (or the first layout after a focus change) arrives
   useEffect(() => {
-    if (layout && !fittedRef.current) {
+    if (layout && !fittedRef.current && stage === null) {
       fittedRef.current = true;
       fit();
     }
-  }, [layout, fit]);
+  }, [layout, fit, stage]);
 
   const visible = useMemo(() => (layout ? applyFilters(layout, { hideInferred, hotspotsOnly }) : null), [layout, hideInferred, hotspotsOnly]);
   const nodesByKey = useMemo(() => new Map((layout?.nodes ?? []).map((n) => [n.key, n])), [layout]);
@@ -247,7 +288,9 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
           ? t.waiting
           : layout === null
             ? t.empty
-            : null;
+            : focus && isLargeFocus(layout.focusSize)
+              ? t.focusLarge(layout.focusSize ?? 0)
+              : null;
 
   return (
     <div style={styles.root}>
@@ -263,14 +306,51 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
         <label style={styles.check}>
           <input type="checkbox" checked={hotspotsOnly} onChange={(e) => setHotspotsOnly(e.target.checked)} /> {t.hotspotsOnly}
         </label>
-        <select value={folderPath} onChange={(e) => setFolderPath(e.target.value)} style={styles.select}>
-          <option value="">{t.allFolders}</option>
-          {allFolders.map((f) => (
-            <option key={f.path} value={f.path}>
-              {f.name}
-            </option>
-          ))}
-        </select>
+        {focus ? (
+          <span style={styles.focusBar}>
+            <Icon path={mdiTarget} size={0.65} />
+            <strong>{focus.label}</strong>
+            <label style={styles.check}>
+              {t.focusCallers}
+              <select value={String(focus.up)} onChange={(e) => setDepth('up', e.target.value)} style={styles.select}>
+                {FOCUS_DEPTH_OPTIONS.map((d: FocusDepthOption) => (
+                  <option key={String(d)} value={String(d)}>
+                    {d === 'all' ? t.focusAll : d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={styles.check}>
+              {t.focusCallees}
+              <select value={String(focus.down)} onChange={(e) => setDepth('down', e.target.value)} style={styles.select}>
+                {FOCUS_DEPTH_OPTIONS.map((d: FocusDepthOption) => (
+                  <option key={String(d)} value={String(d)}>
+                    {d === 'all' ? t.focusAll : d}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button style={styles.button} onClick={leaveFocus} title={t.focusLeave}>
+              <Icon path={mdiClose} size={0.7} />
+            </button>
+          </span>
+        ) : (
+          <>
+            <select value={folderPath} onChange={(e) => setFolderPath(e.target.value)} style={styles.select}>
+              <option value="">{t.allFolders}</option>
+              {allFolders.map((f) => (
+                <option key={f.path} value={f.path}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+            {selected && nodesByKey.get(selected)?.kind === 'function' && (
+              <button style={styles.button} onClick={() => enterFocus(selected)} title={t.focusHint}>
+                <Icon path={mdiTarget} size={0.7} /> {t.focus}
+              </button>
+            )}
+          </>
+        )}
         <button style={styles.button} onClick={fit} title={t.resetZoom}>
           <Icon path={mdiFitToScreenOutline} size={0.7} />
         </button>
@@ -327,8 +407,22 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
                         height={n.y1 - n.y0}
                         rx={3}
                         fill={functionColor(n, colorMode, light)}
-                        style={{ ...styles.box, ...(selected === n.key ? styles.boxSelected : {}) }}
+                        style={{
+                          ...styles.box,
+                          ...(focus?.fnId === n.key ? styles.boxFocus : {}),
+                          ...(selected === n.key ? styles.boxSelected : {}),
+                        }}
                       />
+                      {layout?.boundary?.[n.key]?.hiddenCallers ? (
+                        <text x={n.x1 - 2} y={n.y0 - 3} textAnchor="end" style={styles.boundary} fontSize={Math.max(10, 10 / Math.max(k, 0.01))}>
+                          {`+${layout.boundary[n.key].hiddenCallers} \u2191`}
+                        </text>
+                      ) : null}
+                      {layout?.boundary?.[n.key]?.hiddenCallees ? (
+                        <text x={n.x1 - 2} y={n.y1 + Math.max(10, 10 / Math.max(k, 0.01))} textAnchor="end" style={styles.boundary} fontSize={Math.max(10, 10 / Math.max(k, 0.01))}>
+                          {`+${layout.boundary[n.key].hiddenCallees} \u2193`}
+                        </text>
+                      ) : null}
                       {band === 'near' && (
                         <text x={n.x0 + 4} y={n.y0 + 4 + functionLabelSize(k)} style={styles.boxLabel} fontSize={functionLabelSize(k)}>
                           {n.name}
@@ -393,6 +487,9 @@ const styles: Record<string, React.CSSProperties> = {
   frameLabel: { fill: 'var(--vscode-descriptionForeground, #9d9d9d)', fontWeight: 600, pointerEvents: 'none' },
   box: { stroke: 'rgba(0,0,0,0.35)', strokeWidth: 1, vectorEffect: 'non-scaling-stroke' } as React.CSSProperties,
   boxSelected: { stroke: 'var(--vscode-focusBorder, #007fd4)', strokeWidth: 3 },
+  boxFocus: { stroke: 'var(--vscode-foreground, #cccccc)', strokeWidth: 3 },
+  boundary: { fill: 'var(--vscode-descriptionForeground, #9d9d9d)', fontWeight: 600, pointerEvents: 'none' },
+  focusBar: { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '2px 8px', border: '1px solid var(--vscode-focusBorder, #007fd4)', borderRadius: 4 },
   boxLabel: { fill: '#111', pointerEvents: 'none' },
   stub: { fill: '#111', fontSize: 9, pointerEvents: 'none' },
   edgeCertain: { fill: 'none', stroke: 'var(--vscode-foreground, #cccccc)', strokeWidth: 1.2 },

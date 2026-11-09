@@ -74,3 +74,37 @@ describe('interaction helpers', () => {
     expect(cullToViewport(nodes, { x0: 0, y0: 0, x1: 200, y1: 200 }).map((x) => x.key)).toEqual(['root', 'A', 'a1', 'a2']);
   });
 });
+
+import { FOCUS_DEPTH_OPTIONS, depthToNumber, isLargeFocus, layoutRequestFor, functionLabel } from '../webview/src/utils/callDiagram/view';
+
+describe('focus helpers', () => {
+  const data: any = { scopePath: '', tree: {}, callGraph: { functions: [{ id: 'a.js#Cart.add', qualifiedName: 'Cart.add' }], edges: [], counts: {} }, hotspotFiles: [] };
+  const focusData: any = { ...data, scopePath: '' };
+
+  it('offers depths 0-10 and all', () => {
+    expect(FOCUS_DEPTH_OPTIONS).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 'all']);
+    expect(depthToNumber('all')).toBe(Infinity);
+    expect(depthToNumber(3)).toBe(3);
+  });
+
+  it('warns above 300 functions', () => {
+    expect(isLargeFocus(300)).toBe(false);
+    expect(isLargeFocus(301)).toBe(true);
+    expect(isLargeFocus(undefined)).toBe(false);
+  });
+
+  it('requests the focus on workspace data and restores the scope request when leaving focus', () => {
+    const focus = { fnId: 'a.js#Cart.add', label: 'Cart.add', up: 3 as const, down: 'all' as const };
+    expect(layoutRequestFor({ data, focusData: null, folderPath: 'src', focus, hideInferred: false })).toBeUndefined();
+    expect(layoutRequestFor({ data, focusData, folderPath: 'src', focus, hideInferred: true })).toEqual({
+      data: focusData,
+      focus: { fnId: 'a.js#Cart.add', up: 3, down: Infinity, includeInferred: false },
+    });
+    expect(layoutRequestFor({ data, focusData, folderPath: 'src', focus: null, hideInferred: true })).toEqual({ data, folderPath: 'src' });
+  });
+
+  it('labels functions with their qualified name', () => {
+    expect(functionLabel(data, 'a.js#Cart.add')).toBe('Cart.add');
+    expect(functionLabel(null, 'b.js#x')).toBe('x');
+  });
+});
