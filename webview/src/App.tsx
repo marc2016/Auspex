@@ -6,6 +6,7 @@ import { CouplingGraphViewer } from './components/CouplingGraphViewer';
 import { TreemapDetailsPanel } from './components/TreemapDetailsPanel';
 import { CouplingPanel } from './components/CouplingPanel';
 import { CallsPanel } from './components/CallsPanel';
+import { CallDiagramViewer } from './components/CallDiagramViewer';
 import { KnowledgePanel } from './components/KnowledgePanel';
 import { TopBar } from './components/TopBar';
 import { Icon } from './components/Icon';
@@ -73,7 +74,7 @@ export const App: React.FC = () => {
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
-  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health' | 'coupling' | 'knowledge' | 'calls'>(() => {
+  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health' | 'coupling' | 'knowledge' | 'calls' | 'callDiagram'>(() => {
     if (typeof window !== 'undefined') {
       const v = (window as any).__AUSPEX_VIEW__;
       if (v === 'health' || window.location.search.includes('view=health')) return 'health';
@@ -81,6 +82,7 @@ export const App: React.FC = () => {
       if (v === 'coupling' || window.location.search.includes('view=coupling')) return 'coupling';
       if (v === 'knowledge' || window.location.search.includes('view=knowledge')) return 'knowledge';
       if (v === 'calls' || window.location.search.includes('view=calls')) return 'calls';
+      if (v === 'callDiagram') return 'callDiagram';
     }
     return 'main';
   });
@@ -194,6 +196,10 @@ export const App: React.FC = () => {
     }
   }, [displayTree]);
 
+  if (viewModeType === 'callDiagram') {
+    return <CallDiagramViewer language={language} vscode={vscode} />;
+  }
+
   if (viewModeType === 'calls') {
     return (
       <div className="app-container" style={{ height: '100vh', width: '100%', overflow: 'auto', backgroundColor: 'var(--bg-secondary)' }}>
@@ -299,6 +305,7 @@ export const App: React.FC = () => {
             onOpenFile={handleOpenFile}
             onOpenCommitDiff={handleOpenCommitDiff}
             onOpenExternal={handleOpenExternal}
+            onOpenCallDiagram={(scopePath) => vscode.postMessage({ type: 'openCallDiagram', scopePath })}
             language={language}
             isSidebarView={true}
             initialTab={viewModeType === 'health' ? 'health' : 'details'}

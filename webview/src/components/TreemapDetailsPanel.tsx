@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 import { FileHeader } from './FileHeader';
 import {
   mdiClose,
+  mdiSitemapOutline,
   mdiOpenInApp,
   mdiBugOutline,
   mdiFire,
@@ -69,6 +70,8 @@ interface Props {
   onOpenFile: (filePath: string, startLine?: number, endLine?: number) => void;
   onOpenCommitDiff?: (commitHash: string, filePath?: string, baseCommitHash?: string) => void;
   onOpenExternal?: (url: string) => void;
+  /** Opens a call diagram for a folder (workspace-relative path, '' = workspace). */
+  onOpenCallDiagram?: (scopePath: string) => void;
   language: Language;
   isSidebarView?: boolean;
   initialTab?: 'details' | 'hotspots' | 'health' | 'all';
@@ -92,6 +95,9 @@ const getInitials = (name: string) => {
   return (name.slice(0, 2) || '?').toUpperCase();
 };
 
+/** Workspace-relative scope of a folder node path ('/src/app' -> 'src/app', '/' -> ''). */
+export const folderScopePath = (nodePath: string): string => nodePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+
 export const TreemapDetailsPanel: React.FC<Props> = ({
   node,
   totalLoc,
@@ -99,6 +105,7 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
   onOpenFile,
   onOpenCommitDiff,
   onOpenExternal,
+  onOpenCallDiagram,
   language,
   isSidebarView = false,
   initialTab,
@@ -1317,6 +1324,19 @@ export const TreemapDetailsPanel: React.FC<Props> = ({
         language={language}
         style={{ padding: '2px 0 6px 0', flexShrink: 0 }}
       />
+
+      {onOpenCallDiagram && node.type === 'folder' && (
+        <button
+          onClick={() => onOpenCallDiagram(folderScopePath(node.path))}
+          style={{
+            alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px',
+            border: '1px solid var(--border-color)', borderRadius: 4, cursor: 'pointer',
+            background: 'var(--bg-card)', color: 'var(--text-primary)', fontSize: 12,
+          }}
+        >
+          <Icon path={mdiSitemapOutline} size={0.65} /> {t.callDiagram.openForFolder}
+        </button>
+      )}
 
       {/* 1. Details Section */}
       {showDetails && (

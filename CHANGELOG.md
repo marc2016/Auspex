@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Call count CodeLens above functions (`N callers | M calls`) opening the Calls view (`auspex.showCalls`).
   - Auspex call resolution for JavaScript/TypeScript (same-file calls, `this`/`self` calls, AMD `define()` dependencies, name-based matches marked as *inferred*), computed during the scan and updated on save.
   - Language server integration via the VS Code call hierarchy: on demand for the selected function, or for all functions in the background (`auspex.calls.languageServer`), cached per file.
+- **Call Diagram**:
+  - New editor tab `Auspex: Open Call Diagram` (several tabs possible) showing functions in nested frames for folders, namespaces, files and classes, with calls flowing top to bottom (layered ELK layout).
+  - Color by churn or Code Health, inferred and XML references styled distinctly, out-of-scope calls as counts.
+  - Zoom levels from frames with aggregated edges to labeled functions; selection highlights callers/callees, double-click opens the source.
+  - Filters (hide inferred edges, hotspots only, folder) and automatic updates after scans and saves; layout computed in a Web Worker (new dependency `elkjs`).
+  - Entry points: "Open call diagram for folder" in the details view and a diagram button in the Calls view.
 - **References from XML Files**:
   - New setting `auspex.declarativeReferences` with rules for XML-based files of any extension (attributes, element text, file/function attribute pairs).
   - References (names, `Container.method`, JS expressions, file/function pairs) become callers in the Calls view and count towards the call CodeLens; ambiguous names are marked as inferred.

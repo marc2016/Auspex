@@ -27,6 +27,7 @@ import { updateCallGraphForFile } from './analyzer/calls/incremental';
 import { CallGraphService, type LanguageServerMode } from './analyzer/calls/callGraphService';
 import { LspCallSource } from './integrations/callHierarchy/lspCallSource';
 import { AuspexCallsViewProvider } from './providers/CallsViewProvider';
+import { CallDiagramPanel } from './panels/CallDiagramPanel';
 import { formatDeclarativeReport, hasDeclarativeReport } from './analyzer/declarative/report';
 
 let pipeline: AuspexPipeline;
@@ -54,7 +55,10 @@ let callFileCache: Record<string, ParsedFileInfo> | null = null;
 /** Call graph of the current (scoped) snapshot merged with language server results. */
 const callGraphService = new CallGraphService();
 /** Called whenever the call graph of the current snapshots changed. */
-const onCallGraphChanged = (): void => callGraphService.setBaseGraph(latestSnapshot?.callGraph ?? undefined);
+const onCallGraphChanged = (): void => {
+  callGraphService.setBaseGraph(latestSnapshot?.callGraph ?? undefined);
+  if (latestSnapshot) CallDiagramPanel.broadcastSnapshot(latestSnapshot);
+};
 let backgroundCallAnalysis: vscode.CancellationTokenSource | null = null;
 
 /** Method node of a file node starting at a line. */
@@ -183,6 +187,7 @@ export async function activate(context: vscode.ExtensionContext) {
       if (TreemapPanel.currentPanel) {
         TreemapPanel.currentPanel.sendSnapshot(scoped);
       }
+      CallDiagramPanel.broadcastSnapshot(scoped);
       if (editorHealthDecorator) {
         editorHealthDecorator.updateTree(scoped.tree);
       }
@@ -316,6 +321,25 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('auspex.openTreemap', () => {
       openTreemap(context, workspacePath);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('auspex.openCallDiagram', (scopePath?: unknown) => {
+      CallDiagramPanel.open(
+        context.extensionUri,
+        workspacePath,
+        typeof scopePath === 'string' ? scopePath : '',
+        latestSnapshot,
+        {
+          onFunctionSelected: (filePath, startLine) => {
+            const fileNode = latestSnapshot?.tree ? findFileNode(latestSnapshot.tree, filePath) : null;
+            const node = fileNode ? findMethodNodeAt(fileNode, startLine) : null;
+            if (node) setSelectedNodeAcrossProviders(node, false);
+          },
+          onScanRequested: () => void runScan(context, workspacePath, true),
+        }
+      );
     })
   );
 

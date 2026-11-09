@@ -162,6 +162,9 @@ export class AuspexCallsViewProvider implements vscode.WebviewViewProvider {
       case 'startScan':
         this._deps.startScan();
         break;
+      case 'openCallDiagram':
+        await vscode.commands.executeCommand('auspex.openCallDiagram', message.scopePath ?? '');
+        break;
     }
   }
 

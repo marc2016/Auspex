@@ -103,6 +103,9 @@ export class AuspexDetailsViewProvider implements vscode.WebviewViewProvider {
             payload: null,
           });
           break;
+        case 'openCallDiagram':
+          await vscode.commands.executeCommand('auspex.openCallDiagram', message.scopePath ?? '');
+          break;
         case 'openExternal':
           if (message.url) {
             try {

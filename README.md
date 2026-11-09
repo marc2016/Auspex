@@ -75,6 +75,13 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
 - Calls are resolved by Auspex itself for JavaScript/TypeScript, including `this.x()` / `self.x()` calls inside constructors and calls across AMD `define()` modules. Calls matched only by name are marked as **inferred**.
 - Language servers (VS Code call hierarchy) add precise calls for the selected function on demand; with `auspex.calls.languageServer: "background"` the calls of all functions are collected after each scan (cancellable, cached per file).
 
+### 🕸️ Call Diagram (Editor Tab)
+- `Auspex: Open Call Diagram` opens the functions of the workspace as boxes nested in frames for folders, namespaces, files and classes, connected by their calls - in its own editor tab. Open several diagrams side by side, e.g. one per folder via **Open call diagram for folder** in the details view or the diagram button in the Calls view.
+- Calls flow from top (callers) to bottom (callees), inside and across the frames (layered layout computed with ELK in a Web Worker). Node color follows churn or Code Health (same scales as the treemap); dashed edges = *inferred*, purple = references from XML files; calls leaving the scope are shown as a count on the calling function.
+- Zoom levels: zoomed out you see frames and aggregated edges with call counts, zooming in reveals functions and their names.
+- Click a function to highlight its callers and callees (and select it in the other Auspex views), double-click to open it in the editor.
+- Filters: hide inferred edges, show only hotspots, restrict to a folder. The diagram updates automatically after scans and saves, keeping zoom and selection.
+
 ### 🧩 References from XML Files
 - JavaScript handlers referenced in XML-based files of your own formats (any file extension) appear as **callers** in the Calls view and count towards the call CodeLens.
 - Configure which files and attributes contain references with `auspex.declarativeReferences`:
@@ -168,6 +175,7 @@ Auspex contributes the following commands to the VS Code Command Palette:
 | `Auspex: Open Hotspot Treemap` | `auspex.openTreemap` | Opens the interactive full-screen Treemap tab. |
 | `Auspex: Rescan Workspace` | `auspex.rescan` | Triggers a fresh analysis of AST and Git history. |
 | `Auspex: Focus Details View` | `auspex.focusDetailsView` | Reveals the Auspex sidebar details panel. |
+| `Auspex: Open Call Diagram` | `auspex.openCallDiagram` | Opens a call diagram editor tab for the workspace (or a folder). |
 | `Auspex: Show Calls` | `auspex.showCalls` | Shows a function in the Calls view (used by the call count CodeLens). |
 | `Auspex: Open Guide & Documentation` | `auspex.openHelp` | Opens the built-in Auspex user guide and documentation. |
 | `Auspex: Set Jira API Token` | `auspex.setJiraToken` | Safely saves your Jira API token in the OS Keychain. |

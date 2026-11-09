@@ -4,6 +4,7 @@
   "command.openHelp": "Auspex: Hilfe & Dokumentation öffnen",
   "command.focusDetailsView": "Auspex: Details-Ansicht fokussieren",
   "command.showCalls": "Auspex: Aufrufe anzeigen",
+  "command.openCallDiagram": "Auspex: Aufrufdiagramm öffnen",
   "command.setJiraToken": "Auspex: Jira API-Token festlegen",
   "command.clearJiraToken": "Auspex: Jira API-Token löschen",
   "command.testJiraConnection": "Auspex: Jira-Verbindung testen",

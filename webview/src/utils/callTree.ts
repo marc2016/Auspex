@@ -50,3 +50,10 @@ export function buildCallTreeRows(
   visit(roots, [subjectId], 0);
   return rows;
 }
+
+/** Folder containing a workspace-relative file ('' for files in the workspace root). */
+export function folderOfFile(file: string): string {
+  const norm = file.replace(/\\/g, '/').replace(/^\/+/, '');
+  const idx = norm.lastIndexOf('/');
+  return idx < 0 ? '' : norm.slice(0, idx);
+}

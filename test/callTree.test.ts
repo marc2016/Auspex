@@ -35,3 +35,11 @@ describe('buildCallTreeRows', () => {
     expect(rows[1]).toMatchObject({ canExpand: false, recursive: false });
   });
 });
+
+describe('folderOfFile', () => {
+  it('returns the containing folder of a workspace-relative file', async () => {
+    const { folderOfFile } = await import('../webview/src/utils/callTree');
+    expect(folderOfFile('src/cart/cart.js')).toBe('src/cart');
+    expect(folderOfFile('/root.js')).toBe('');
+  });
+});

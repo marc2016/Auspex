@@ -29,6 +29,7 @@ export const EXT_STRINGS = {
     scanError: (msg: string) => `Auspex: Analyse fehlgeschlagen: ${msg}`,
     scanNotificationTitle: 'Auspex: Workspace wird analysiert',
     callAnalysisProgressTitle: 'Auspex: Aufrufe über Language Server ermitteln',
+    callDiagramTitle: 'Aufrufdiagramm',
     callCountLens: (callers: number, callees: number) => `${callers} Aufrufer | ${callees} Aufrufe`,
     declarativeReport: {
       title: 'Auspex: Verweise in XML-Dateien (auspex.declarativeReferences)',
@@ -113,6 +114,7 @@ export const EXT_STRINGS = {
     scanError: (msg: string) => `Auspex: Scan failed: ${msg}`,
     scanNotificationTitle: 'Auspex: Analyzing Workspace',
     callAnalysisProgressTitle: 'Auspex: Finding calls via language servers',
+    callDiagramTitle: 'Call Diagram',
     declarativeReport: {
       title: 'Auspex: References in XML files (auspex.declarativeReferences)',
       warnings: 'Rule warnings:',

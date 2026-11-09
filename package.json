@@ -56,6 +56,11 @@
         "title": "%command.showCalls%"
       },
       {
+        "command": "auspex.openCallDiagram",
+        "title": "%command.openCallDiagram%",
+        "icon": "$(type-hierarchy)"
+      },
+      {
         "command": "auspex.setJiraToken",
         "title": "%command.setJiraToken%",
         "icon": "$(key)"
@@ -249,7 +254,11 @@
         },
         "auspex.calls.languageServer": {
           "type": "string",
-          "enum": ["onDemand", "background", "off"],
+          "enum": [
+            "onDemand",
+            "background",
+            "off"
+          ],
           "enumDescriptions": [
             "Query the language server for the calls of the function shown in the Calls view.",
             "Additionally query the outgoing calls of all functions in the background after each scan (cancellable, cached per file).",
@@ -264,22 +273,52 @@
           "markdownDescription": "Rules for finding references to JavaScript functions in XML-based files (any file extension). References become callers in the Calls view. Example: `[{ \"files\": \"**/*.form\", \"attributes\": [\"onClick\", \"handler\"] }]`",
           "items": {
             "type": "object",
-            "required": ["files"],
+            "required": [
+              "files"
+            ],
             "properties": {
               "files": {
                 "description": "Glob pattern(s) (gitignore syntax) of the files the rule applies to, relative to the workspace.",
                 "anyOf": [
-                  { "type": "string" },
-                  { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1
+                  }
                 ]
               },
               "attributes": {
                 "description": "Attributes whose values reference JS functions: a name, Container.method, or a JS expression such as save(this, 1).",
-                "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
               },
               "elements": {
                 "description": "Elements whose text references JS functions.",
-                "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
               },
               "fileAttribute": {
                 "type": "string",
@@ -313,6 +352,7 @@
     "@mdi/js": "^7.4.47",
     "@mdi/react": "^1.6.1",
     "d3": "^7.9.0",
+    "elkjs": "^0.9.3",
     "ignore": "^7.0.9",
     "simple-git": "^3.27.0"
   },

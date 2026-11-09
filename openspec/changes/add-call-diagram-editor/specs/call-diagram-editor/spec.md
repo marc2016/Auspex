@@ -38,7 +38,7 @@ The diagram SHALL show every function and method in its scope as a box, nested i
 - **THEN** they are shown as one frame `src/app/core`, as in the system map
 
 ### Requirement: Call edges
-The diagram SHALL draw an edge for every call edge whose caller and callee are both in scope, with a direction marker. Edges between different frames SHALL be bundled along the frame hierarchy. `inferred` edges SHALL be visually distinct from `certain` edges, and `declarative` edges from location callers SHALL start at the frame of the referencing file.
+The diagram SHALL draw an edge for every call edge whose caller and callee are both in scope, with a direction marker, routed around frames and nodes. `inferred` edges SHALL be visually distinct from `certain` edges, and `declarative` edges from location callers SHALL start at the frame of the referencing file.
 
 #### Scenario: Certain and inferred edges
 - **GIVEN** `save` calls `persist` (`certain`) and `render` (`inferred`)
@@ -50,8 +50,21 @@ The diagram SHALL draw an edge for every call edge whose caller and callee are b
 - **WHEN** the diagram is shown
 - **THEN** the call is indicated as an outgoing stub at `Cart.save` with the count of out-of-scope callees, not as an edge to a hidden box
 
+### Requirement: Call flow direction
+The diagram SHALL arrange functions so that calls flow in one main direction, top to bottom: within and across frames, a caller SHALL be placed above its callees unless a call cycle prevents it.
+
+#### Scenario: Call chain
+- **GIVEN** `collect` calls `resolveSite`, which calls `resolveBare`, all in one class
+- **WHEN** the diagram is shown
+- **THEN** `collect` is above `resolveSite`, which is above `resolveBare`
+
+#### Scenario: Cycle
+- **GIVEN** `a` calls `b` and `b` calls `a`
+- **WHEN** the diagram is shown
+- **THEN** both are drawn with both edges and the layout completes
+
 ### Requirement: Visual encoding
-Box size SHALL grow with the function's LOC with a minimum size that keeps labels legible, and box color SHALL use the same Code Health / hotspot color scale as the treemap.
+Function nodes SHALL be wide enough for their name, their height SHALL grow moderately with the function's LOC within fixed bounds, and their color SHALL use the same Code Health / hotspot color scale as the treemap.
 
 #### Scenario: Hotspot color
 - **GIVEN** a function with low Code Health and high churn

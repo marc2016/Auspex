@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { mdiChevronRight, mdiChevronDown, mdiFunctionVariant, mdiFileCodeOutline, mdiReload } from '@mdi/js';
+import { mdiChevronRight, mdiChevronDown, mdiFunctionVariant, mdiFileCodeOutline, mdiReload, mdiSitemapOutline } from '@mdi/js';
 import type { CallDirection, CallEntry, CallsViewState } from '../../../src/analyzer/calls/viewModel';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
 import { getCodeHealthColor } from './SystemMapViewer';
 import { getHeatColor } from './TreemapViewer';
-import { buildCallTreeRows, type ChildrenState } from '../utils/callTree';
+import { buildCallTreeRows, folderOfFile, type ChildrenState } from '../utils/callTree';
 
 interface VsCodeLike {
   postMessage(message: unknown): void;
@@ -72,6 +72,9 @@ export const CallsPanel: React.FC<Props> = ({ language, vscode }) => {
     }
   };
 
+  const openDiagram = (entry: CallEntry) =>
+    vscode.postMessage({ type: 'openCallDiagram', scopePath: folderOfFile(entry.file) });
+
   const open = (entry: CallEntry) =>
     vscode.postMessage({ type: 'openFile', filePath: entry.file, startLine: entry.line, endLine: entry.endLine ?? entry.line });
 
@@ -95,7 +98,7 @@ export const CallsPanel: React.FC<Props> = ({ language, vscode }) => {
 
   return (
     <div style={styles.container}>
-      <SubjectHeader entry={state.subject} t={t} onOpen={open} />
+      <SubjectHeader entry={state.subject} t={t} onOpen={open} onOpenDiagram={openDiagram} diagramLabel={WEBVIEW_STRINGS[language].callDiagram.openForFunction} />
       {state.lspLoading && <div style={styles.note}>{t.lspLoading}</div>}
       {state.nameOnly && <div style={styles.note}>{t.nameOnly}</div>}
       <CallSection
@@ -150,10 +153,27 @@ const Metrics: React.FC<{ entry: CallEntry; t: CallStrings }> = ({ entry, t }) =
   );
 };
 
-const SubjectHeader: React.FC<{ entry: CallEntry; t: CallStrings; onOpen: (e: CallEntry) => void }> = ({ entry, t, onOpen }) => (
+const SubjectHeader: React.FC<{
+  entry: CallEntry;
+  t: CallStrings;
+  onOpen: (e: CallEntry) => void;
+  onOpenDiagram: (e: CallEntry) => void;
+  diagramLabel: string;
+}> = ({ entry, t, onOpen, onOpenDiagram, diagramLabel }) => (
   <div style={styles.subject} onClick={() => onOpen(entry)} title={entry.file}>
     <div style={styles.subjectTitle}>
       <Icon path={mdiFunctionVariant} size={0.75} /> {entry.label}
+      <span
+        role="button"
+        title={diagramLabel}
+        style={styles.diagramButton}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenDiagram(entry);
+        }}
+      >
+        <Icon path={mdiSitemapOutline} size={0.65} />
+      </span>
     </div>
     <div style={styles.subjectMeta}>
       <span style={styles.muted}>{entry.file}</span>
@@ -243,4 +263,5 @@ const styles: Record<string, React.CSSProperties> = {
   dot: { width: 8, height: 8, borderRadius: '50%', display: 'inline-block' },
   badge: { fontWeight: 600, fontSize: 11 },
   muted: { color: 'var(--vscode-descriptionForeground)', fontSize: 11 },
+  diagramButton: { marginLeft: 'auto', display: 'inline-flex', cursor: 'pointer', opacity: 0.8 },
 };

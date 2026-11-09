@@ -785,3 +785,11 @@ describe('Webview Helpers', () => {
   });
 });
 
+
+describe('folderScopePath', () => {
+  it('turns folder node paths into workspace-relative scopes', async () => {
+    const { folderScopePath } = await import('../webview/src/components/TreemapDetailsPanel');
+    expect(folderScopePath('/src/app')).toBe('src/app');
+    expect(folderScopePath('/')).toBe('');
+  });
+});
