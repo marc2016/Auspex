@@ -373,6 +373,20 @@ describe('AstStructureAnalyzer', () => {
       ]);
     });
 
+    it('stores imports, module flag and receiver types for TypeScript files', () => {
+      const code = [
+        "import { resolveLanguage } from '../i18n';",
+        'export function run(index: FunctionIndex) {',
+        '  resolveLanguage();',
+        '  return index.get(1);',
+        '}',
+      ].join('\n');
+      const parsed = analyzer.analyzeSource(code, 'src/run.ts');
+      expect(parsed.imports).toEqual([{ local: 'resolveLanguage', imported: 'resolveLanguage', source: '../i18n' }]);
+      expect(parsed.isModule).toBe(true);
+      expect(parsed.callSites?.find((s) => s.callee === 'get')?.receiverType).toBe('FunctionIndex');
+    });
+
     it('does not extract call sites for other languages', () => {
       const parsed = analyzer.analyzeSource('def run():\n    go()\n', 'src/app.py');
       expect(parsed.callSites).toBeUndefined();

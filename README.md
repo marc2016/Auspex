@@ -72,7 +72,7 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
 - The **Calls** sidebar view shows who calls the selected function (incoming) and what it calls (outgoing) as expandable trees; recursive calls are marked and not expanded further.
 - Every entry shows its Code Health, churn color and LOC; clicking an entry opens it in the editor.
 - A CodeLens above each function shows the number of known callers and callees (e.g. `5 callers | 3 calls`) and opens the Calls view.
-- Calls are resolved by Auspex itself for JavaScript/TypeScript, including `this.x()` / `self.x()` calls inside constructors and calls across AMD `define()` modules. Calls matched only by name are marked as **inferred**.
+- Calls are resolved by Auspex itself for JavaScript/TypeScript: ES `import`s and `require` of relative modules, `this.x()` / `self.x()` calls inside constructors, calls across AMD `define()` modules, and receivers with a known type (`new X()` or a TypeScript annotation such as `index: FunctionIndex`). Calls matched only by name are marked as **inferred**; built-in methods like `map.get()` or `list.push()` on objects of unknown type and ambiguous method names produce no edge.
 - Language servers (VS Code call hierarchy) add precise calls for the selected function on demand; with `auspex.calls.languageServer: "background"` the calls of all functions are collected after each scan (cancellable, cached per file).
 
 ### 🕸️ Call Diagram (Editor Tab)

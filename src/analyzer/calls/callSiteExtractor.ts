@@ -1,5 +1,5 @@
 import type { MethodInfo } from '../types';
-import type { CallSite, ReceiverKind } from './types';
+import type { CallSite, FileImport, ReceiverKind } from './types';
 
 /** Names that look like calls but are language constructs. */
 const NON_CALL_KEYWORDS = new Set([
@@ -166,6 +166,79 @@ export function sanitizeSource(lines: string[]): string[] {
 const CALL_PATTERN = /([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\(/g;
 const THIS_ALIAS = /\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*this\b/g;
 
+/** `var x = new X(`, optionally with an annotation: the constructed class wins. */
+const NEW_DECLARATION = /\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*(?::[^=]*)?=\s*new\s+([A-Za-z_$][\w$.]*)/g;
+/** `var x: Type` (generic arguments are cut off by the character class). */
+const ANNOTATED_DECLARATION = /\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$.]*)/g;
+/** `name: Type` / `name?: Type` inside a parameter list. */
+const PARAMETER_ANNOTATION = /([A-Za-z_$][\w$]*)\??\s*:\s*([A-Za-z_$][\w$.]*)/g;
+
+interface TypeHint {
+  name: string;
+  type: string;
+  declLine: number;
+  startLine: number;
+  endLine: number;
+}
+
+const lastSegment = (dotted: string) => dotted.split('.').pop() ?? dotted;
+
+/**
+ * Receiver type hints: `new X()` assignments and TypeScript annotations of variables and of the
+ * parameters of known functions. A hint applies within the innermost function declaring it.
+ */
+function collectTypeHints(code: string[], methods: MethodInfo[], totalLines: number): TypeHint[] {
+  const hints: TypeHint[] = [];
+  const scopeOf = (line: number) => {
+    const owner = innermostMethod(line, methods);
+    return { startLine: owner?.startLine ?? 1, endLine: owner?.endLine ?? totalLines };
+  };
+  code.forEach((text, idx) => {
+    const line = idx + 1;
+    const seen = new Set<string>();
+    for (const m of text.matchAll(NEW_DECLARATION)) {
+      seen.add(m[1]);
+      hints.push({ name: m[1], type: lastSegment(m[2]), declLine: line, ...scopeOf(line) });
+    }
+    for (const m of text.matchAll(ANNOTATED_DECLARATION)) {
+      if (!seen.has(m[1])) hints.push({ name: m[1], type: lastSegment(m[2]), declLine: line, ...scopeOf(line) });
+    }
+  });
+  // parameters: signature from the start line up to the opening brace
+  for (const m of methods) {
+    let signature = '';
+    for (let l = m.startLine; l <= Math.min(m.endLine, m.startLine + 10, code.length); l++) {
+      const text = code[l - 1];
+      const brace = text.indexOf('{');
+      signature += ' ' + (brace >= 0 ? text.slice(0, brace) : text);
+      if (brace >= 0) break;
+    }
+    const open = signature.indexOf('(');
+    const close = signature.lastIndexOf(')');
+    if (open < 0 || close <= open) continue;
+    for (const p of signature.slice(open + 1, close).matchAll(PARAMETER_ANNOTATION)) {
+      hints.push({ name: p[1], type: lastSegment(p[2]), declLine: m.startLine, startLine: m.startLine, endLine: m.endLine });
+    }
+  }
+  return hints;
+}
+
+/** Nearest hint for a receiver at a line: innermost scope, then latest declaration before the line. */
+function typeOf(hints: TypeHint[], name: string, line: number): string | undefined {
+  let best: TypeHint | undefined;
+  for (const h of hints) {
+    if (h.name !== name || line < h.startLine || line > h.endLine || h.declLine > line) continue;
+    if (
+      !best ||
+      h.endLine - h.startLine < best.endLine - best.startLine ||
+      (h.endLine - h.startLine === best.endLine - best.startLine && h.declLine > best.declLine)
+    ) {
+      best = h;
+    }
+  }
+  return best?.type;
+}
+
 interface AliasScope {
   name: string;
   startLine: number;
@@ -226,6 +299,7 @@ export function extractCallSites(
       });
     }
   });
+  const typeHints = collectTypeHints(code, methods, lines.length);
   const isThisAlias = (name: string, line: number) =>
     aliases.some((a) => a.name === name && line >= a.startLine && line <= a.endLine);
 
@@ -283,6 +357,9 @@ export function extractCallSites(
           callee,
           receiverKind,
           ...(receiver !== undefined ? { receiver } : {}),
+          ...(receiverKind === 'other' && receiver && !receiver.includes('.') && typeOf(typeHints, receiver, lineNo)
+            ? { receiverType: typeOf(typeHints, receiver, lineNo) }
+            : {}),
         });
       }
     }
@@ -318,4 +395,70 @@ export function extractAmdDependencies(lines: string[]): Record<string, string> 
     map[params[k]] = deps[k];
   }
   return map;
+}
+
+const IMPORT_STATEMENT = /\bimport\s+(type\s+)?([^'";]*?)\s*\bfrom\s*(['"])([^'"]+)\3/g;
+const REQUIRE_DECLARATION =
+  /\b(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*require\(\s*(['"])([^'"]+)\2\s*\)/g;
+const IDENT = /^[A-Za-z_$][\w$]*$/;
+
+/** Parses `{ a, b as c, type d }` (imports) or `{ a, b: c }` (destructured require). */
+function parseNamedList(list: string, separator: 'as' | ':'): { imported: string; local: string }[] {
+  return list
+    .replace(/^\{|\}$/g, '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => item && !/^type\s/.test(item))
+    .map((item) => {
+      const [imported, local] =
+        separator === 'as' ? item.split(/\s+as\s+/).map((x) => x.trim()) : item.split(':').map((x) => x.trim());
+      return { imported, local: local || imported };
+    })
+    .filter((x) => IDENT.test(x.imported) && IDENT.test(x.local));
+}
+
+/**
+ * ES imports (default, named with `as`, namespace, combinations; `import type` skipped) and CommonJS
+ * requires of relative modules. Matches inside comments or strings are ignored. `isModule` is true
+ * if the file has top-level `import`/`export` statements.
+ */
+export function extractImports(lines: string[]): { imports: FileImport[]; isModule: boolean } {
+  const raw = lines.join('\n');
+  const code = sanitizeSource(lines).join('\n');
+  const isCode = (index: number, keyword: string) => code.startsWith(keyword, index);
+  const imports: FileImport[] = [];
+  const add = (local: string, imported: string, source: string) => {
+    if (source.startsWith('.')) imports.push({ local, imported, source });
+  };
+
+  for (const m of raw.matchAll(IMPORT_STATEMENT)) {
+    const start = m.index! + m[0].indexOf('import');
+    if (!isCode(start, 'import') || m[1]) continue; // in a comment/string, or `import type`
+    const clause = m[2].trim();
+    const source = m[4];
+    const braceAt = clause.indexOf('{');
+    const head = (braceAt >= 0 ? clause.slice(0, braceAt) : clause).replace(/,\s*$/, '').trim();
+    for (const part of head.split(',').map((p) => p.trim()).filter(Boolean)) {
+      const ns = part.match(/^\*\s+as\s+([A-Za-z_$][\w$]*)$/);
+      if (ns) add(ns[1], '*', source);
+      else if (IDENT.test(part)) add(part, 'default', source);
+    }
+    if (braceAt >= 0) {
+      const list = clause.slice(braceAt, clause.indexOf('}', braceAt) + 1);
+      for (const n of parseNamedList(list, 'as')) add(n.local, n.imported, source);
+    }
+  }
+
+  for (const m of raw.matchAll(REQUIRE_DECLARATION)) {
+    if (!isCode(m.index!, m[0].slice(0, 3))) continue;
+    const target = m[1];
+    const source = m[3];
+    if (target.startsWith('{')) {
+      for (const n of parseNamedList(target, ':')) add(n.local, n.imported, source);
+    } else {
+      add(target, '*', source);
+    }
+  }
+
+  return { imports, isModule: /^[ \t]*(?:import|export)\b/m.test(code) };
 }

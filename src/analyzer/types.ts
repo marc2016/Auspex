@@ -1,4 +1,4 @@
-import type { CallSite, CallGraph } from './calls/types';
+import type { CallSite, CallGraph, FileImport } from './calls/types';
 import type { DeclarativeRef } from './declarative/references';
 
 export interface UnresolvedDeclarativeRef {
@@ -67,7 +67,7 @@ export interface ClassInfo {
  * Increment whenever extractor or analyzer changes alter results for unchanged files,
  * so cached file results and stored snapshots from older versions are re-analyzed.
  */
-export const ANALYZER_VERSION = 4;
+export const ANALYZER_VERSION = 5;
 
 export interface ParsedFileInfo {
   filePath: string;
@@ -85,6 +85,10 @@ export interface ParsedFileInfo {
   callSites?: CallSite[];
   /** AMD factory parameter -> dependency id, from `define([...], function (...) {})`. */
   amdDependencies?: Record<string, string>;
+  /** ES imports and requires of relative modules (JS/TS only). */
+  imports?: FileImport[];
+  /** True if the file is an ES module (top-level `import`/`export`). */
+  isModule?: boolean;
   /** References to JS functions found in XML-like files (`auspex.declarativeReferences`). */
   declarativeRefs?: DeclarativeRef[];
   /** Hash of the reference rules this result was produced with. */

@@ -37,6 +37,18 @@ export interface CallSite {
   receiverKind: ReceiverKind;
   /** Receiver identifier for `amd` and `other` calls. */
   receiver?: string;
+  /** Type of the receiver from a local `new X()` or a TypeScript annotation (last name segment). */
+  receiverType?: string;
+}
+
+/** An ES import or CommonJS require of a relative module. */
+export interface FileImport {
+  /** Local name in the importing file. */
+  local: string;
+  /** Imported name, `default` or `*` (namespace / whole module). */
+  imported: string;
+  /** Module specifier as written (relative, e.g. `../i18n`). */
+  source: string;
 }
 
 /** A location in a file that is not a function (e.g. an XML attribute referencing a JS handler). */

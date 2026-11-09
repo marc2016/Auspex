@@ -1,5 +1,5 @@
 import { JavaScriptExtractor } from '../../src/analyzer/extractors/JavaScriptExtractor';
-import { extractCallSites, extractAmdDependencies } from '../../src/analyzer/calls/callSiteExtractor';
+import { extractCallSites, extractAmdDependencies, extractImports } from '../../src/analyzer/calls/callSiteExtractor';
 import type { ParsedFileInfo } from '../../src/analyzer/types';
 
 const extractor = new JavaScriptExtractor();
@@ -15,5 +15,8 @@ export function parseJsWithCalls(filePath: string, src: string[]): ParsedFileInf
   const file = parseJs(filePath, src);
   file.callSites = extractCallSites(src, file.methods);
   file.amdDependencies = extractAmdDependencies(src);
+  const { imports, isModule } = extractImports(src);
+  file.imports = imports;
+  file.isModule = isModule;
   return file;
 }

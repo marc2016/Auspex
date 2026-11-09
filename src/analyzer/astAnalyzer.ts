@@ -10,7 +10,7 @@ export interface CollectFilesOptions {
 
 import { CodeHealthAnalyzer } from './codeHealth';
 import { extractorRegistry } from './extractors/registry';
-import { extractCallSites, extractAmdDependencies } from './calls/callSiteExtractor';
+import { extractCallSites, extractAmdDependencies, extractImports } from './calls/callSiteExtractor';
 import { RuleMatcher, type ParsedRules } from './declarative/rules';
 import { extractDeclarativeRefs, extractHeuristicRefs } from './declarative/references';
 
@@ -435,16 +435,22 @@ export class AstStructureAnalyzer {
     return this.parseSource(content, relPath, lastModifiedAt);
   }
 
-  /** Call sites and AMD dependencies (JavaScript/TypeScript only). */
+  /** Call sites, AMD dependencies and imports (JavaScript/TypeScript only). */
   private extractCalls(
     lines: string[],
     methods: MethodInfo[],
     lang: string
-  ): Pick<ParsedFileInfo, 'callSites' | 'amdDependencies'> {
+  ): Pick<ParsedFileInfo, 'callSites' | 'amdDependencies' | 'imports' | 'isModule'> {
     if (lang !== 'javascript' && lang !== 'typescript') return {};
     const amdDependencies = extractAmdDependencies(lines);
     const callSites = extractCallSites(lines, methods, amdDependencies);
-    return amdDependencies ? { callSites, amdDependencies } : { callSites };
+    const { imports, isModule } = extractImports(lines);
+    return {
+      callSites,
+      ...(amdDependencies ? { amdDependencies } : {}),
+      ...(imports.length > 0 ? { imports } : {}),
+      isModule,
+    };
   }
 
   private extractStructure(
