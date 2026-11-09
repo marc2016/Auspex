@@ -75,6 +75,26 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
 - Calls are resolved by Auspex itself for JavaScript/TypeScript, including `this.x()` / `self.x()` calls inside constructors and calls across AMD `define()` modules. Calls matched only by name are marked as **inferred**.
 - Language servers (VS Code call hierarchy) add precise calls for the selected function on demand; with `auspex.calls.languageServer: "background"` the calls of all functions are collected after each scan (cancellable, cached per file).
 
+### 🧩 References from XML Files
+- JavaScript handlers referenced in XML-based files of your own formats (any file extension) appear as **callers** in the Calls view and count towards the call CodeLens.
+- Configure which files and attributes contain references with `auspex.declarativeReferences`:
+
+```json
+"auspex.declarativeReferences": [
+  {
+    "files": "**/*.form",
+    "attributes": ["onClick", "handler"],
+    "elements": ["handler"],
+    "fileAttribute": "script",
+    "functionAttribute": "function"
+  }
+]
+```
+
+- Supported values: a function name (`save`), a qualified name (`Cart.save`), a JS expression (`save(this, 1)` - every called name counts) and a file/function attribute pair on one element. Unique matches are *certain*, ambiguous names create *inferred* references to every candidate.
+- After each scan, rule warnings, per-rule counts and unresolved references are listed in the **Auspex** output channel.
+- Optional heuristic mode (`auspex.declarativeReferences.heuristic`, off by default) also scans unconfigured XML-like files and keeps only code-like values, always as *inferred*.
+
 ### 🌐 System Architecture Map
 - High-level architectural overview grouping packages, folders, and modules as concentric circular clusters.
 - Color-coded health metrics to spot architectural decay and module complexity at a single glance.
@@ -163,6 +183,8 @@ You can customize Auspex in VS Code Settings (`Cmd+,` / `Ctrl+,` → search for 
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `auspex.ignorePatterns` | `string[]` | `["node_modules", "dist", "build", ".git", "out", "bin", "obj"]` | Glob patterns to exclude from analysis. |
+| `auspex.declarativeReferences` | `object[]` | `[]` | Rules for JS references in XML-based files: `files` (glob or list), `attributes`, `elements`, `fileAttribute` + `functionAttribute`. |
+| `auspex.declarativeReferences.heuristic` | `boolean` | `false` | Also scan unconfigured XML-like files for code-like references (always inferred). |
 | `auspex.calls.languageServer` | `string` | `"onDemand"` | Use of language servers for calls: `onDemand` (selected function in the Calls view), `background` (all functions after each scan) or `off` (Auspex resolution only). |
 | `auspex.jira.enabled` | `boolean` | `false` | Enable read-only Jira integration to enrich defect detection. |
 | `auspex.jira.host` | `string` | `""` | URL of your Jira instance (e.g. `https://company.atlassian.net`). |

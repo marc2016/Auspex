@@ -27,6 +27,7 @@ import { updateCallGraphForFile } from './analyzer/calls/incremental';
 import { CallGraphService, type LanguageServerMode } from './analyzer/calls/callGraphService';
 import { LspCallSource } from './integrations/callHierarchy/lspCallSource';
 import { AuspexCallsViewProvider } from './providers/CallsViewProvider';
+import { formatDeclarativeReport, hasDeclarativeReport } from './analyzer/declarative/report';
 
 let pipeline: AuspexPipeline;
 let storage: AuspexStorage | null = null;
@@ -64,6 +65,20 @@ function findMethodNodeAt(node: TreeNode, startLine: number): TreeNode | null {
     if (found) return found;
   }
   return null;
+}
+
+let outputChannel: vscode.OutputChannel | null = null;
+
+/** Writes rule warnings, per-rule counts and unresolved references to the "Auspex" output channel. */
+function writeDeclarativeReport(snapshot: AnalysisSnapshot): void {
+  if (!hasDeclarativeReport(snapshot.declarativeReport)) {
+    outputChannel?.clear();
+    return;
+  }
+  if (!outputChannel) outputChannel = vscode.window.createOutputChannel('Auspex');
+  const t = EXT_STRINGS[resolveLanguage()].declarativeReport;
+  outputChannel.clear();
+  for (const line of formatDeclarativeReport(snapshot.declarativeReport, t)) outputChannel.appendLine(line);
 }
 
 function languageServerMode(): LanguageServerMode {
@@ -714,12 +729,21 @@ async function runScan(
         ignorePatterns,
         jiraClient,
         allowedProjectKeys,
-        { maxCommits, authorAliases, respectGitIgnore }
+        {
+          maxCommits,
+          authorAliases,
+          respectGitIgnore,
+          declarativeReferences: {
+            rules: config.get<unknown>('declarativeReferences', []),
+            heuristic: config.get<boolean>('declarativeReferences.heuristic', false),
+          },
+        }
       );
 
       rawSnapshot = snapshot;
       callFileCache = null;
       await applyCurrentScopeAndDistribute();
+      writeDeclarativeReport(snapshot);
       void startBackgroundCallAnalysis(workspacePath);
 
       if (interactive) {
@@ -769,5 +793,7 @@ function updateStatusBar() {
 }
 
 export function deactivate() {
+  outputChannel?.dispose();
+  outputChannel = null;
   console.log('[Auspex] Extension deactivated.');
 }

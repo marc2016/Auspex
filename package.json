@@ -257,6 +257,45 @@
           ],
           "default": "onDemand",
           "description": "How Auspex uses language servers (VS Code call hierarchy) to find calls between functions."
+        },
+        "auspex.declarativeReferences": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Rules for finding references to JavaScript functions in XML-based files (any file extension). References become callers in the Calls view. Example: `[{ \"files\": \"**/*.form\", \"attributes\": [\"onClick\", \"handler\"] }]`",
+          "items": {
+            "type": "object",
+            "required": ["files"],
+            "properties": {
+              "files": {
+                "description": "Glob pattern(s) (gitignore syntax) of the files the rule applies to, relative to the workspace.",
+                "anyOf": [
+                  { "type": "string" },
+                  { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+                ]
+              },
+              "attributes": {
+                "description": "Attributes whose values reference JS functions: a name, Container.method, or a JS expression such as save(this, 1).",
+                "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+              },
+              "elements": {
+                "description": "Elements whose text references JS functions.",
+                "anyOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+              },
+              "fileAttribute": {
+                "type": "string",
+                "description": "Attribute naming a JS file; use together with functionAttribute."
+              },
+              "functionAttribute": {
+                "type": "string",
+                "description": "Attribute naming a function in the file given by fileAttribute."
+              }
+            }
+          }
+        },
+        "auspex.declarativeReferences.heuristic": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also scan XML-like files without a matching rule and keep code-like attribute values as inferred references."
         }
       }
     }

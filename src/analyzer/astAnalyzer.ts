@@ -11,6 +11,8 @@ export interface CollectFilesOptions {
 import { CodeHealthAnalyzer } from './codeHealth';
 import { extractorRegistry } from './extractors/registry';
 import { extractCallSites, extractAmdDependencies } from './calls/callSiteExtractor';
+import { RuleMatcher, type ParsedRules } from './declarative/rules';
+import { extractDeclarativeRefs, extractHeuristicRefs } from './declarative/references';
 
 export const DEFAULT_IGNORE_PATTERNS = [
   'node_modules',
@@ -119,6 +121,7 @@ export function isPathIgnored(name: string, relPath: string, patterns: string[])
 
 export class AstStructureAnalyzer {
   private codeHealthAnalyzer = new CodeHealthAnalyzer();
+  private declarative: { parsed: ParsedRules; matcher: RuleMatcher } | undefined;
 
   collectFiles(
     dirPath: string,
@@ -232,12 +235,52 @@ export class AstStructureAnalyzer {
     return !!CODE_EXTENSIONS[ext.toLowerCase()];
   }
 
+  /** Configures reference rules for XML-like files (`auspex.declarativeReferences`). */
+  setDeclarativeRules(parsed: ParsedRules): void {
+    this.declarative = { parsed, matcher: new RuleMatcher(parsed.rules) };
+  }
+
+  /** Hash of the configured reference rules (undefined if none are configured). */
+  get declarativeRulesHash(): string | undefined {
+    return this.declarative?.parsed.hash;
+  }
+
+  /** Whether a file must be scanned for declarative references with the current rules. */
+  needsDeclarativeScan(relPath: string): boolean {
+    if (!this.declarative) return false;
+    if (this.declarative.matcher.rulesFor(relPath).length > 0) return true;
+    return this.declarative.parsed.heuristic && !CODE_EXTENSIONS[path.extname(relPath).toLowerCase()];
+  }
+
   analyzeSource(content: string, relPath: string, lastModifiedAt: number = Date.now()): ParsedFileInfo {
-    return { ...this.parseSource(content, relPath, lastModifiedAt), analyzerVersion: ANALYZER_VERSION };
+    return this.withDeclarativeRefs(this.parseSource(content, relPath, lastModifiedAt), () => content);
   }
 
   analyzeFile(absolutePath: string, relPath: string): ParsedFileInfo {
-    return { ...this.parseFile(absolutePath, relPath), analyzerVersion: ANALYZER_VERSION };
+    return this.withDeclarativeRefs(this.parseFile(absolutePath, relPath), () => fs.readFileSync(absolutePath, 'utf-8'));
+  }
+
+  /** Stamps the analyzer version and adds declarative references for rule-matching files. */
+  private withDeclarativeRefs(info: ParsedFileInfo, readContent: () => string): ParsedFileInfo {
+    const result: ParsedFileInfo = { ...info, analyzerVersion: ANALYZER_VERSION };
+    if (!this.declarative) return result;
+    result.rulesHash = this.declarative.parsed.hash;
+
+    const rules = this.declarative.matcher.rulesFor(info.filePath);
+    // Heuristic mode only applies to non-code files without a matching rule
+    const heuristic =
+      rules.length === 0 && this.declarative.parsed.heuristic && !CODE_EXTENSIONS[path.extname(info.filePath).toLowerCase()];
+    if (rules.length === 0 && !heuristic) return result;
+    let content: string;
+    try {
+      content = readContent();
+    } catch {
+      return result;
+    }
+    if (content.length > 2 * 1024 * 1024) return result;
+    const refs = rules.length > 0 ? extractDeclarativeRefs(content, rules) : extractHeuristicRefs(content);
+    if (refs.length > 0) result.declarativeRefs = refs;
+    return result;
   }
 
   private parseSource(content: string, relPath: string, lastModifiedAt: number): ParsedFileInfo {
@@ -389,7 +432,7 @@ export class AstStructureAnalyzer {
       };
     }
 
-    return this.analyzeSource(content, relPath, lastModifiedAt);
+    return this.parseSource(content, relPath, lastModifiedAt);
   }
 
   /** Call sites and AMD dependencies (JavaScript/TypeScript only). */

@@ -30,6 +30,15 @@ export const EXT_STRINGS = {
     scanNotificationTitle: 'Auspex: Workspace wird analysiert',
     callAnalysisProgressTitle: 'Auspex: Aufrufe über Language Server ermitteln',
     callCountLens: (callers: number, callees: number) => `${callers} Aufrufer | ${callees} Aufrufe`,
+    declarativeReport: {
+      title: 'Auspex: Verweise in XML-Dateien (auspex.declarativeReferences)',
+      warnings: 'Warnungen zu Regeln:',
+      rules: 'Regeln:',
+      rule: (files: string, matchedFiles: number, references: number) =>
+        `${files}: ${matchedFiles} Dateien, ${references} Verweise`,
+      unresolved: 'Nicht aufgelöste Verweise',
+      noUnresolved: 'Alle Verweise wurden aufgelöst.',
+    },
     statusBarTooltip: (files: number) => `Auspex: ${files} Dateien analysiert. Klicken, um Treemap zu öffnen.`,
     statusBarDefault: 'Klicken, um Auspex Treemap zu öffnen',
     fileOpenError: (path: string) => `[Auspex] Datei konnte nicht geöffnet werden: ${path}`,
@@ -104,6 +113,15 @@ export const EXT_STRINGS = {
     scanError: (msg: string) => `Auspex: Scan failed: ${msg}`,
     scanNotificationTitle: 'Auspex: Analyzing Workspace',
     callAnalysisProgressTitle: 'Auspex: Finding calls via language servers',
+    declarativeReport: {
+      title: 'Auspex: References in XML files (auspex.declarativeReferences)',
+      warnings: 'Rule warnings:',
+      rules: 'Rules:',
+      rule: (files: string, matchedFiles: number, references: number) =>
+        `${files}: ${matchedFiles} files, ${references} references`,
+      unresolved: 'Unresolved references',
+      noUnresolved: 'All references were resolved.',
+    },
     callCountLens: (callers: number, callees: number) =>
       `${callers} ${callers === 1 ? 'caller' : 'callers'} | ${callees} ${callees === 1 ? 'call' : 'calls'}`,
     statusBarTooltip: (files: number) => `Auspex: ${files} files analyzed. Click to open Treemap.`,

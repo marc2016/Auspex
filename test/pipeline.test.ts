@@ -222,4 +222,48 @@ describe('AuspexPipeline', () => {
     });
     expect(snap.callGraph?.functions.map((f) => f.id)).toContain('src/index.ts#main');
   });
+
+  describe('declarative references', () => {
+    const rules = [{ files: '**/*.form', attributes: ['onClick'] }];
+    const formPath = () => path.join(tempWorkspace, 'src', 'order.form');
+    const writeForm = () =>
+      fs.writeFileSync(formPath(), ['<form>', '  <button onClick="main" handler="other"/>', '</form>'].join('\n'));
+    const run = (r: unknown) =>
+      pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir'], null, [], { declarativeReferences: { rules: r } });
+
+    it('extracts references from files matching a rule regardless of extension', async () => {
+      writeForm();
+      await run(rules);
+      expect(storage.loadFileCache()['src/order.form'].declarativeRefs).toEqual([
+        { name: 'main', line: 2, form: 'name', value: 'main' },
+      ]);
+    });
+
+    it('reuses cached references while the rules are unchanged', async () => {
+      writeForm();
+      await run(rules);
+      const cache = storage.loadFileCache();
+      cache['src/order.form'].declarativeRefs = [{ name: 'sentinel', line: 1, form: 'name', value: 'sentinel' }];
+      storage.saveFileCache(cache);
+      await run(rules);
+      expect(storage.loadFileCache()['src/order.form'].declarativeRefs?.[0].name).toBe('sentinel');
+    });
+
+    it('re-extracts references after a rule change', async () => {
+      writeForm();
+      await run(rules);
+      await run([{ files: '**/*.form', attributes: ['onClick', 'handler'] }]);
+      expect(storage.loadFileCache()['src/order.form'].declarativeRefs?.map((r) => r.name)).toEqual(['main', 'other']);
+    });
+
+    it('does not re-parse unaffected files when rules change', async () => {
+      writeForm();
+      await run(rules);
+      const cache = storage.loadFileCache();
+      cache['src/index.ts'].loc = 4242;
+      storage.saveFileCache(cache);
+      await run([{ files: '**/*.form', attributes: ['handler'] }]);
+      expect(storage.loadFileCache()['src/index.ts'].loc).toBe(4242);
+    });
+  });
 });

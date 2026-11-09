@@ -9,13 +9,34 @@ import type {
   PipelineProgress,
   ParsedFileInfo,
   JiraIssueInfo,
+  DeclarativeReport,
 } from './types';
 import { ANALYZER_VERSION } from './types';
 import { isReusableFileResult } from './versioning';
 import { CallGraphBuilder } from './calls/callGraphBuilder';
+import { parseRules, RuleMatcher, type ParsedRules } from './declarative/rules';
+import { DeclarativeEdgeSource } from './declarative/declarativeEdgeSource';
 import type { AuspexStorage } from '../storage/cache';
 import { extractJiraKeys } from '../integrations/jira/ticketExtractor';
 import type { JiraClient } from '../integrations/jira/jiraClient';
+
+/** Rule warnings, per-rule counts and unresolved references for the output channel. */
+export function buildDeclarativeReport(
+  parsed: ParsedRules,
+  files: ParsedFileInfo[],
+  unresolved: DeclarativeReport['unresolved']
+): DeclarativeReport {
+  const rules = parsed.rules.map((rule) => {
+    const matcher = new RuleMatcher([rule]);
+    const matched = files.filter((f) => matcher.rulesFor(f.filePath).length > 0);
+    return {
+      files: rule.files,
+      matchedFiles: matched.length,
+      references: matched.reduce((n, f) => n + (f.declarativeRefs?.filter((r) => !r.heuristic).length ?? 0), 0),
+    };
+  });
+  return { warnings: parsed.warnings, rules, unresolved };
+}
 
 export class AuspexPipeline {
   private churnAnalyzer = new GitChurnAnalyzer();
@@ -23,6 +44,20 @@ export class AuspexPipeline {
   private treeAggregator = new TreeAggregator();
   /** Builds call graphs; further edge sources can be registered on it. */
   readonly callGraphBuilder = new CallGraphBuilder();
+  private readonly declarativeSource = new DeclarativeEdgeSource();
+
+  constructor() {
+    this.callGraphBuilder.register(this.declarativeSource);
+  }
+
+  /**
+   * A cached result stays valid for declarative references if it was produced with the same rules,
+   * or if the file is not affected by the current rules and had no references before.
+   */
+  private declarativeResultValid(cached: ParsedFileInfo, relPath: string, rulesHash: string): boolean {
+    if (cached.rulesHash === rulesHash) return true;
+    return !this.astAnalyzer.needsDeclarativeScan(relPath) && !(cached.declarativeRefs && cached.declarativeRefs.length > 0);
+  }
 
   async run(
     workspacePath: string,
@@ -35,9 +70,16 @@ export class AuspexPipeline {
       maxCommits?: number;
       authorAliases?: Record<string, string[]>;
       respectGitIgnore?: boolean;
+      /** Raw `auspex.declarativeReferences` setting and heuristic flag. */
+      declarativeReferences?: { rules?: unknown; heuristic?: boolean };
     }
   ): Promise<AnalysisSnapshot> {
     const startTime = Date.now();
+    const declarativeRules = parseRules(
+      options?.declarativeReferences?.rules,
+      options?.declarativeReferences?.heuristic ?? false
+    );
+    this.astAnalyzer.setDeclarativeRules(declarativeRules);
 
     // 1. Get HEAD commit SHA if available
     let headCommitSha = 'workspace';
@@ -152,7 +194,7 @@ export class AuspexPipeline {
 
       let parsed: ParsedFileInfo;
       const cached = cachedFiles[relPath];
-      if (isReusableFileResult(cached)) {
+      if (isReusableFileResult(cached) && this.declarativeResultValid(cached, relPath, declarativeRules.hash)) {
         let isStale = false;
         try {
           const stat = fs.statSync(absPath);
@@ -207,6 +249,7 @@ export class AuspexPipeline {
       );
 
     const callGraph = this.callGraphBuilder.build(parsedFiles);
+    const declarativeReport = buildDeclarativeReport(declarativeRules, parsedFiles, this.declarativeSource.lastUnresolved);
 
     if (knowledgeSummary) {
       knowledgeSummary.detectedAuthors = this.churnAnalyzer.lastDetectedAuthors;
@@ -231,6 +274,7 @@ export class AuspexPipeline {
       authorAliases: options?.authorAliases,
       analyzerVersion: ANALYZER_VERSION,
       callGraph,
+      declarativeReport,
     };
 
     if (storage) {

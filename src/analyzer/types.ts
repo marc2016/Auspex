@@ -1,4 +1,18 @@
 import type { CallSite, CallGraph } from './calls/types';
+import type { DeclarativeRef } from './declarative/references';
+
+export interface UnresolvedDeclarativeRef {
+  file: string;
+  line: number;
+  value: string;
+}
+
+export interface DeclarativeReport {
+  warnings: string[];
+  /** Per rule (in configuration order): matched files and found references. */
+  rules: { files: string[]; matchedFiles: number; references: number }[];
+  unresolved: UnresolvedDeclarativeRef[];
+}
 
 export type NodeType = 'folder' | 'namespace' | 'file' | 'class' | 'method';
 
@@ -53,7 +67,7 @@ export interface ClassInfo {
  * Increment whenever extractor or analyzer changes alter results for unchanged files,
  * so cached file results and stored snapshots from older versions are re-analyzed.
  */
-export const ANALYZER_VERSION = 3;
+export const ANALYZER_VERSION = 4;
 
 export interface ParsedFileInfo {
   filePath: string;
@@ -71,6 +85,10 @@ export interface ParsedFileInfo {
   callSites?: CallSite[];
   /** AMD factory parameter -> dependency id, from `define([...], function (...) {})`. */
   amdDependencies?: Record<string, string>;
+  /** References to JS functions found in XML-like files (`auspex.declarativeReferences`). */
+  declarativeRefs?: DeclarativeRef[];
+  /** Hash of the reference rules this result was produced with. */
+  rulesHash?: string;
 }
 
 export interface ContributorStat {
@@ -243,6 +261,8 @@ export interface AnalysisSnapshot {
   analyzerVersion?: number;
   /** Call relationships between known functions. */
   callGraph?: CallGraph;
+  /** Rule warnings and unresolved declarative references of the last scan. */
+  declarativeReport?: DeclarativeReport;
 }
 
 export type ScopeMode = 'all' | 'worktree' | 'timeframe';
