@@ -7,16 +7,17 @@ The treemap shows how big and risky code is, and the planned "Calls" view shows 
 ## What Changes
 
 - New editor tab "Call Diagram" (a separate webview editor, not a chart type inside the treemap tab), opened via a command and from the treemap/"Calls" view context. Several diagram tabs can be open at once.
-- The diagram shows **all** functions of the chosen scope (whole workspace by default, or a folder) as boxes, nested in frames for folders, namespaces/modules and classes/containers, following the same hierarchy as the treemap.
+- The diagram shows **all** functions of the chosen scope (whole workspace by default, or a folder) as boxes, nested in frames for folders, namespaces/modules, files and classes/containers, following the same hierarchy as the treemap.
 - Calls between functions are drawn as edges; edges between distant frames are bundled. Edge confidence (`certain` / `inferred`) and source kind (e.g. `js`, `declarative`) are visually distinguishable.
 - Layout is structure-based (frames arranged by hierarchy, functions inside their frame) and rendered with d3, which the webview already uses; no new layout dependency.
 - Visual encoding consistent with the treemap: box size by LOC, color by Code Health / churn (hotspots).
 - Interaction: pan/zoom; semantic zoom (zoomed out: frames and bundled edges only; zoomed in: functions and labels); selecting a function highlights its incoming/outgoing calls; double-click opens the function in the source editor.
 - Filters: hide inferred edges, show only hotspots, restrict to a folder.
 
-**Open / to be validated**
-- Performance budget for large workspaces (thousands of functions): whether SVG suffices or canvas rendering is needed at the outer zoom levels.
-- Whether the diagram updates live after rescans/edits or on explicit refresh.
+**Decided during planning**
+- The diagram updates automatically when a new analysis result is available (scan or file save), keeping the current viewport and selection.
+- Rendering starts with SVG plus level-of-detail; switching outer zoom levels to canvas is a fallback only if measurements on large workspaces require it (see design).
+- Files are frames too, between namespace/module and class, matching the treemap hierarchy.
 
 ## Capabilities
 
