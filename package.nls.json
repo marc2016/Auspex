@@ -18,5 +18,11 @@
   "views.couplingView": "Auspex Coupling",
   "views.knowledgeView": "Auspex Knowledge Monopolies",
   "views.callsView": "Auspex Calls",
-  "command.toggleEditorHealth": "Auspex: Toggle Code Health in Editor"
+  "command.toggleEditorHealth": "Auspex: Toggle Code Health in Editor",
+  "command.toggleLiveCalls": "Auspex: Toggle Live Calls",
+  "command.liveCallsOn": "Turn on live mode (follow the cursor)",
+  "command.liveCallsOff": "Turn off live mode",
+  "command.pinCalls": "Pin Calls view",
+  "command.unpinCalls": "Unpin Calls view",
+  "config.calls.liveMode": "Live mode: the Calls view and call diagram tabs follow the function at the text cursor."
 }

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { mdiFitToScreenOutline, mdiTarget, mdiClose } from '@mdi/js';
+import { mdiFitToScreenOutline, mdiTarget, mdiClose, mdiPin, mdiPinOffOutline, mdiCrosshairsGps } from '@mdi/js';
 import type { CallDiagramData } from '../../../src/analyzer/calls/diagramData';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
@@ -25,6 +25,8 @@ import {
   functionLabel,
   isLargeFocus,
   layoutRequestFor,
+  panIntoView,
+  isCursorOutside,
   type DiagramColorMode,
   type DiagramFocus,
   type FocusDepthOption,
@@ -116,6 +118,9 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   const [focus, setFocus] = useState<DiagramFocus | null>(null);
   const [focusData, setFocusData] = useState<CallDiagramData | null>(null);
   const focusDataRequested = useRef(false);
+  /** Function at the text cursor (live mode); fnId null = none or not analyzed. */
+  const [cursor, setCursor] = useState<{ fnId: string | null; label: string | null } | null>(null);
+  const [pinned, setPinned] = useState(false);
 
   // Layout runner (ELK in its own worker, main-thread fallback)
   useEffect(() => {
@@ -146,7 +151,13 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
       if (msg?.type === 'diagram:data') setData(msg.payload as CallDiagramData);
       else if (msg?.type === 'diagram:focusData') setFocusData(msg.payload as CallDiagramData);
       else if (msg?.type === 'diagram:focus' && msg.payload?.fnId) {
-        setFocus({ fnId: msg.payload.fnId, label: msg.payload.label ?? msg.payload.fnId, up: FOCUS_DEFAULT_DEPTH, down: FOCUS_DEFAULT_DEPTH });
+        const { fnId, keepDepths } = msg.payload;
+        const label = msg.payload.label ?? fnId;
+        setFocus((f) =>
+          keepDepths && f ? { ...f, fnId, label } : { fnId, label, up: FOCUS_DEFAULT_DEPTH, down: FOCUS_DEFAULT_DEPTH }
+        );
+      } else if (msg?.type === 'diagram:cursor') {
+        setCursor(msg.payload?.fnId || msg.payload?.label ? { fnId: msg.payload.fnId ?? null, label: msg.payload.label ?? null } : null);
       }
     };
     window.addEventListener('message', onMessage);
@@ -183,6 +194,11 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     focusDataRequested.current = false;
     setFocusData(null);
     vscode.postMessage({ type: 'focusClosed' });
+  };
+  const togglePin = () => {
+    const next = !pinned;
+    setPinned(next);
+    vscode.postMessage({ type: 'setPinned', pinned: next });
   };
   const setDepth = (which: 'up' | 'down', value: string) =>
     setFocus((f) => (f ? { ...f, [which]: value === 'all' ? 'all' : Number(value) } : f));
@@ -235,6 +251,23 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
       fit();
     }
   }, [layout, fit, stage]);
+
+  // Bring the cursor function into view (only if it is outside the viewport; zoom unchanged)
+  const cursorFnId = cursor?.fnId ?? null;
+  useEffect(() => {
+    if (!cursorFnId || !layout || stage !== null) return;
+    const el = containerRef.current;
+    const box = layout.nodes.find((n) => n.key === cursorFnId);
+    if (!el || !box || !svgRef.current || !zoomRef.current) return;
+    const tr = transformRef.current;
+    const [x0, y0] = tr.invert([0, 0]);
+    const [x1, y1] = tr.invert([el.clientWidth, el.clientHeight]);
+    const delta = panIntoView(box, { x0, y0, x1, y1 }, 24 / tr.k);
+    if (!delta) return;
+    d3.select(svgRef.current).transition().duration(250).call(zoomRef.current.translateBy, -delta.dx, -delta.dy);
+  }, [cursorFnId, layout, stage]);
+
+  const cursorOutside = !!focus && pinned && isCursorOutside(layout, cursorFnId);
 
   const visible = useMemo(() => (layout ? applyFilters(layout, { hideInferred, hotspotsOnly }) : null), [layout, hideInferred, hotspotsOnly]);
   const nodesByKey = useMemo(() => new Map((layout?.nodes ?? []).map((n) => [n.key, n])), [layout]);
@@ -330,6 +363,17 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
                 ))}
               </select>
             </label>
+            <button style={{ ...styles.button, ...(pinned ? styles.pinActive : {}) }} onClick={togglePin} title={pinned ? t.unpin : t.pin}>
+              <Icon path={pinned ? mdiPinOffOutline : mdiPin} size={0.7} />
+            </button>
+            {cursorOutside && cursor?.label && (
+              <span style={styles.outside}>
+                {t.cursorOutside(cursor.label)}
+                <button style={styles.linkButton} onClick={() => vscode.postMessage({ type: 'focusHere' })}>
+                  <Icon path={mdiCrosshairsGps} size={0.6} /> {t.focusHere}
+                </button>
+              </span>
+            )}
             <button style={styles.button} onClick={leaveFocus} title={t.focusLeave}>
               <Icon path={mdiClose} size={0.7} />
             </button>
@@ -344,6 +388,9 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
                 </option>
               ))}
             </select>
+            <button style={{ ...styles.button, ...(pinned ? styles.pinActive : {}) }} onClick={togglePin} title={pinned ? t.unpin : t.pin}>
+              <Icon path={pinned ? mdiPinOffOutline : mdiPin} size={0.7} />
+            </button>
             {selected && nodesByKey.get(selected)?.kind === 'function' && (
               <button style={styles.button} onClick={() => enterFocus(selected)} title={t.focusHint}>
                 <Icon path={mdiTarget} size={0.7} /> {t.focus}
@@ -395,7 +442,7 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
                     <g
                       key={n.key}
                       style={{ cursor: 'pointer' }}
-                      opacity={dimmed(n.key) ? 0.2 : 1}
+                      opacity={dimmed(n.key) && cursorFnId !== n.key ? 0.2 : 1}
                       onClick={() => onFunctionClick(n)}
                       onDoubleClick={() => onFunctionDoubleClick(n)}
                     >
@@ -413,6 +460,18 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
                           ...(selected === n.key ? styles.boxSelected : {}),
                         }}
                       />
+                      {cursorFnId === n.key && (
+                        <rect
+                          x={n.x0 - 4 / Math.max(k, 0.3)}
+                          y={n.y0 - 4 / Math.max(k, 0.3)}
+                          width={n.x1 - n.x0 + 8 / Math.max(k, 0.3)}
+                          height={n.y1 - n.y0 + 8 / Math.max(k, 0.3)}
+                          rx={5}
+                          style={styles.boxCursor}
+                        >
+                          <title>{t.cursorHere}</title>
+                        </rect>
+                      )}
                       {layout?.boundary?.[n.key]?.hiddenCallers ? (
                         <text x={n.x1 - 2} y={n.y0 - 3} textAnchor="end" style={styles.boundary} fontSize={Math.max(10, 10 / Math.max(k, 0.01))}>
                           {`+${layout.boundary[n.key].hiddenCallers} \u2191`}
@@ -488,6 +547,17 @@ const styles: Record<string, React.CSSProperties> = {
   box: { stroke: 'rgba(0,0,0,0.35)', strokeWidth: 1, vectorEffect: 'non-scaling-stroke' } as React.CSSProperties,
   boxSelected: { stroke: 'var(--vscode-focusBorder, #007fd4)', strokeWidth: 3 },
   boxFocus: { stroke: 'var(--vscode-foreground, #cccccc)', strokeWidth: 3 },
+  boxCursor: {
+    fill: 'none',
+    stroke: 'var(--vscode-editorCursor-foreground, #ffcc00)',
+    strokeWidth: 2.5,
+    strokeDasharray: '6 3',
+    vectorEffect: 'non-scaling-stroke',
+    pointerEvents: 'none',
+  } as React.CSSProperties,
+  pinActive: { color: 'var(--vscode-focusBorder, #007fd4)' },
+  outside: { display: 'inline-flex', alignItems: 'center', gap: 6, fontStyle: 'italic', color: 'var(--vscode-descriptionForeground, #9d9d9d)' },
+  linkButton: { display: 'inline-flex', alignItems: 'center', gap: 3, background: 'transparent', border: 'none', color: 'var(--vscode-textLink-foreground, #3794ff)', cursor: 'pointer', fontSize: 12 },
   boundary: { fill: 'var(--vscode-descriptionForeground, #9d9d9d)', fontWeight: 600, pointerEvents: 'none' },
   focusBar: { display: 'inline-flex', alignItems: 'center', gap: 8, padding: '2px 8px', border: '1px solid var(--vscode-focusBorder, #007fd4)', borderRadius: 4 },
   boxLabel: { fill: '#111', pointerEvents: 'none' },

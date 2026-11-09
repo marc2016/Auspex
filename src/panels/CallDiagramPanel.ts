@@ -5,6 +5,7 @@ import type { AnalysisSnapshot } from '../analyzer/types';
 import { buildCallDiagramData, normalizeScopePath } from '../analyzer/calls/diagramData';
 import { openFileInEditor } from '../utils/navigation';
 import { resolveLanguage, EXT_STRINGS } from '../i18n';
+import type { CurrentFunction } from '../analyzer/calls/currentFunction';
 
 /** Function a tab is focused on when it opens. */
 export interface CallDiagramFocusTarget {
@@ -56,9 +57,29 @@ export class CallDiagramPanel {
     return instance;
   }
 
+  /** Delay before an unpinned focus tab re-focuses on a new function at the cursor (ms). */
+  public static refocusDelayMs = 400;
+  /** Live mode state and function at the cursor, shared by all tabs (also for tabs opened later). */
+  private static _live = false;
+  private static _current: CurrentFunction | null = null;
+
   /** Sends a new analysis result to every open diagram tab. */
   public static broadcastSnapshot(snapshot: AnalysisSnapshot): void {
     for (const instance of CallDiagramPanel.instances) instance.sendSnapshot(snapshot);
+  }
+
+  /** New function at the text cursor (live mode). */
+  public static broadcastCurrentFunction(cf: CurrentFunction): void {
+    CallDiagramPanel._live = true;
+    CallDiagramPanel._current = cf;
+    for (const instance of CallDiagramPanel.instances) instance.onCurrentFunction(cf);
+  }
+
+  /** Live mode switched on or off; off removes the cursor markers. */
+  public static broadcastLive(live: boolean): void {
+    CallDiagramPanel._live = live;
+    if (!live) CallDiagramPanel._current = null;
+    for (const instance of CallDiagramPanel.instances) instance.onLive(live);
   }
 
   public static titleFor(workspacePath: string, scope: string): string {
@@ -72,6 +93,9 @@ export class CallDiagramPanel {
 
   /** Whether the webview is in focus mode (needs workspace-wide data). */
   private _focused = false;
+  /** Pinned tabs keep scope, focus and layout; only the cursor marker follows. */
+  private _pinned = false;
+  private _refocusTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor(
     private readonly _panel: vscode.WebviewPanel,
@@ -90,6 +114,43 @@ export class CallDiagramPanel {
 
   public get title(): string {
     return this._panel.title;
+  }
+
+  public get pinned(): boolean {
+    return this._pinned;
+  }
+
+  private postCursor(cf: CurrentFunction | null): void {
+    this._panel.webview.postMessage({
+      type: 'diagram:cursor',
+      payload: cf ? { fnId: cf.fnId ?? null, label: cf.qualifiedName } : { fnId: null, label: null },
+    });
+  }
+
+  private postFocus(fnId: string, label: string): void {
+    this._panel.webview.postMessage({ type: 'diagram:focus', payload: { fnId, label, keepDepths: true } });
+  }
+
+  private onCurrentFunction(cf: CurrentFunction): void {
+    this.postCursor(cf);
+    if (this._pinned || !this._focused || !cf.fnId) return;
+    this.cancelRefocus();
+    const fnId = cf.fnId;
+    this._refocusTimer = setTimeout(() => {
+      this._refocusTimer = null;
+      this.postFocus(fnId, cf.qualifiedName);
+    }, CallDiagramPanel.refocusDelayMs);
+  }
+
+  private onLive(live: boolean): void {
+    if (live) return;
+    this.cancelRefocus();
+    this.postCursor(null);
+  }
+
+  private cancelRefocus(): void {
+    if (this._refocusTimer) clearTimeout(this._refocusTimer);
+    this._refocusTimer = null;
   }
 
   public sendSnapshot(snapshot: AnalysisSnapshot): void {
@@ -115,7 +176,23 @@ export class CallDiagramPanel {
         if (this._initialFocus) {
           this._panel.webview.postMessage({ type: 'diagram:focus', payload: this._initialFocus });
         }
+        if (CallDiagramPanel._live && CallDiagramPanel._current) this.postCursor(CallDiagramPanel._current);
         break;
+      case 'setPinned': {
+        this._pinned = !!message.pinned;
+        const cf = CallDiagramPanel._current;
+        if (this._pinned) this.cancelRefocus();
+        else if (CallDiagramPanel._live && this._focused && cf?.fnId) this.postFocus(cf.fnId, cf.qualifiedName);
+        break;
+      }
+      case 'focusHere': {
+        const cf = CallDiagramPanel._current;
+        if (cf?.fnId) {
+          this._focused = true;
+          this.postFocus(cf.fnId, cf.qualifiedName);
+        }
+        break;
+      }
       case 'requestFocusData':
         this._focused = true;
         this.sendFocusData();
@@ -139,6 +216,7 @@ export class CallDiagramPanel {
 
   public dispose(): void {
     if (!CallDiagramPanel.instances.delete(this)) return;
+    this.cancelRefocus();
     this._panel.dispose();
     while (this._disposables.length) this._disposables.pop()?.dispose();
   }

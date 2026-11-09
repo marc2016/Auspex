@@ -65,6 +65,30 @@
         "title": "%command.focusInCallDiagram%"
       },
       {
+        "command": "auspex.toggleLiveCalls",
+        "title": "%command.toggleLiveCalls%"
+      },
+      {
+        "command": "auspex.liveCallsOn",
+        "title": "%command.liveCallsOn%",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "auspex.liveCallsOff",
+        "title": "%command.liveCallsOff%",
+        "icon": "$(broadcast)"
+      },
+      {
+        "command": "auspex.pinCalls",
+        "title": "%command.pinCalls%",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "auspex.unpinCalls",
+        "title": "%command.unpinCalls%",
+        "icon": "$(pinned)"
+      },
+      {
         "command": "auspex.setJiraToken",
         "title": "%command.setJiraToken%",
         "icon": "$(key)"
@@ -129,6 +153,44 @@
           "command": "auspex.toggleEditorHealth",
           "when": "view == auspex.detailsView || view == auspex.healthView || view == auspex.overviewView",
           "group": "navigation@4"
+        },
+        {
+          "command": "auspex.liveCallsOn",
+          "when": "view == auspex.callsView && !auspex.liveCalls",
+          "group": "navigation@1"
+        },
+        {
+          "command": "auspex.liveCallsOff",
+          "when": "view == auspex.callsView && auspex.liveCalls",
+          "group": "navigation@1"
+        },
+        {
+          "command": "auspex.pinCalls",
+          "when": "view == auspex.callsView && !auspex.callsPinned",
+          "group": "navigation@2"
+        },
+        {
+          "command": "auspex.unpinCalls",
+          "when": "view == auspex.callsView && auspex.callsPinned",
+          "group": "navigation@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "auspex.liveCallsOn",
+          "when": "false"
+        },
+        {
+          "command": "auspex.liveCallsOff",
+          "when": "false"
+        },
+        {
+          "command": "auspex.pinCalls",
+          "when": "false"
+        },
+        {
+          "command": "auspex.unpinCalls",
+          "when": "false"
         }
       ]
     },
@@ -277,6 +339,11 @@
           ],
           "default": "onDemand",
           "description": "How Auspex uses language servers (VS Code call hierarchy) to find calls between functions."
+        },
+        "auspex.calls.liveMode": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.calls.liveMode%"
         },
         "auspex.declarativeReferences": {
           "type": "array",

@@ -7,6 +7,7 @@ import type { CallFunctionRef } from '../analyzer/calls/types';
 import { callEntriesFor, functionEntry, type CallDirection, type CallsViewState } from '../analyzer/calls/viewModel';
 import { openFileInEditor } from '../utils/navigation';
 import { resolveLanguage, EXT_STRINGS } from '../i18n';
+import type { CurrentFunction } from '../analyzer/calls/currentFunction';
 
 /** Language server access needed by the view (implemented with LspCallSource). */
 export interface OnDemandLsp {
@@ -26,6 +27,12 @@ export class AuspexCallsViewProvider implements vscode.WebviewViewProvider {
 
   private _view?: vscode.WebviewView;
   private _selectedNode: TreeNode | null = null;
+  /** Subject set from the text cursor (live mode); takes precedence over `_selectedNode` while set. */
+  private _cursorSubject: CurrentFunction | null = null;
+  /** Latest function at the text cursor (for the marker), independent of the subject. */
+  private _currentFunction: CurrentFunction | null = null;
+  private _live = false;
+  private _pinned = false;
   private _snapshot: AnalysisSnapshot | null = null;
   private _lspLoading = false;
   private _nameOnly = false;
@@ -43,24 +50,85 @@ export class AuspexCallsViewProvider implements vscode.WebviewViewProvider {
     return this._selectedNode;
   }
 
+  public get pinned(): boolean {
+    return this._pinned;
+  }
+
   public updateSnapshot(snapshot: AnalysisSnapshot): void {
     this._snapshot = snapshot;
     this.postState();
   }
 
+  /** Explicit selection (treemap, diagram, CodeLens). Ignored while pinned. */
   public setSelectedNode(node: TreeNode | null, reveal = true): void {
-    const changed = node?.path !== this._selectedNode?.path || node?.startLine !== this._selectedNode?.startLine;
+    if (this._pinned) return;
+    const before = this.subjectKey();
     this._selectedNode = node;
-    if (changed) {
+    this._cursorSubject = null;
+    this.afterSubjectChange(before);
+    if (reveal && this._view) this._view.show?.(true);
+  }
+
+  /**
+   * Selection distributed to all views: explicit selections set the subject; selections that only
+   * follow the active editor (a file node) are ignored so the view keeps its function.
+   */
+  public applySelection(node: TreeNode | null, source: 'explicit' | 'editor'): void {
+    if (source === 'editor') return;
+    this.setSelectedNode(node, false);
+  }
+
+  /** Live mode switched on or off (the marker is shown only while live). */
+  public setLive(live: boolean): void {
+    if (this._live === live) return;
+    this._live = live;
+    if (!live) this._currentFunction = null;
+    this.postState();
+  }
+
+  /** New function at the text cursor (live mode): becomes the subject unless pinned. */
+  public setCurrentFunction(cf: CurrentFunction): void {
+    this._live = true;
+    this._currentFunction = cf;
+    if (this._pinned) {
+      this.postState();
+      return;
+    }
+    const before = this.subjectKey();
+    this._cursorSubject = cf;
+    this.afterSubjectChange(before);
+  }
+
+  /** Pins or unpins the view; unpinning jumps to the function at the cursor while live. */
+  public setPinned(pinned: boolean): void {
+    if (this._pinned === pinned) return;
+    this._pinned = pinned;
+    void vscode.commands.executeCommand('setContext', 'auspex.callsPinned', pinned);
+    if (!pinned && this._live && this._currentFunction) {
+      this.setCurrentFunction(this._currentFunction);
+      return;
+    }
+    this.postState();
+  }
+
+  private subjectKey(): string {
+    if (this._cursorSubject) return `cursor:${this._cursorSubject.fnId ?? `${this._cursorSubject.file}#${this._cursorSubject.qualifiedName}?`}`;
+    return `node:${this._selectedNode?.path}|${this._selectedNode?.startLine}`;
+  }
+
+  private afterSubjectChange(beforeKey: string): void {
+    if (this.subjectKey() !== beforeKey) {
       this._nameOnly = false;
       void this.queryLanguageServer();
     }
     this.postState();
-    if (reveal && this._view) this._view.show?.(true);
   }
 
   /** The function shown as subject, if the selected node is a known function. */
   public subjectFunction(): CallFunctionRef | undefined {
+    if (this._cursorSubject) {
+      return this._cursorSubject.fnId ? this._deps.service.getFunction(this._cursorSubject.fnId) : undefined;
+    }
     const node = this._selectedNode;
     if (!node || node.type !== 'method' || node.startLine === undefined) return undefined;
     const file = (node.path || '').split('#')[0].replace(/\\/g, '/').replace(/^\/+/, '');
@@ -71,8 +139,16 @@ export class AuspexCallsViewProvider implements vscode.WebviewViewProvider {
   /** Current state for the webview. */
   public buildState(): CallsViewState {
     const graph = this._deps.service.graph;
-    const empty = { incoming: [], outgoing: [], lspLoading: false, nameOnly: false };
+    const flags = {
+      pinned: this._pinned,
+      live: this._live,
+      currentFnId: this._live ? this._currentFunction?.fnId : undefined,
+    };
+    const empty = { incoming: [], outgoing: [], lspLoading: false, nameOnly: false, ...flags };
     if (!graph || !this._snapshot) return { status: 'noScan', ...empty };
+    if (this._cursorSubject && !this._cursorSubject.fnId) {
+      return { status: 'notAnalyzed', pendingLabel: this._cursorSubject.qualifiedName, ...empty };
+    }
     const fn = this.subjectFunction();
     if (!fn) return { status: 'notFunction', ...empty };
 
@@ -84,6 +160,7 @@ export class AuspexCallsViewProvider implements vscode.WebviewViewProvider {
       outgoing: callEntriesFor(graph, tree, fn.id, 'outgoing'),
       lspLoading: this._lspLoading,
       nameOnly: this._nameOnly || this._deps.getMode() === 'off',
+      ...flags,
     };
   }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { mdiChevronRight, mdiChevronDown, mdiFunctionVariant, mdiFileCodeOutline, mdiReload, mdiSitemapOutline } from '@mdi/js';
+import { mdiChevronRight, mdiChevronDown, mdiFunctionVariant, mdiFileCodeOutline, mdiReload, mdiSitemapOutline, mdiCrosshairsGps } from '@mdi/js';
 import type { CallDirection, CallEntry, CallsViewState } from '../../../src/analyzer/calls/viewModel';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
@@ -78,6 +78,8 @@ export const CallsPanel: React.FC<Props> = ({ language, vscode }) => {
   const open = (entry: CallEntry) =>
     vscode.postMessage({ type: 'openFile', filePath: entry.file, startLine: entry.line, endLine: entry.endLine ?? entry.line });
 
+  const pinned = !!state.pinned;
+
   if (state.status === 'noScan') {
     return (
       <div style={styles.message}>
@@ -88,17 +90,36 @@ export const CallsPanel: React.FC<Props> = ({ language, vscode }) => {
       </div>
     );
   }
+  if (state.status === 'notAnalyzed') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.message}>
+          <p>{t.notAnalyzed(state.pendingLabel ?? '')}</p>
+        </div>
+      </div>
+    );
+  }
   if (state.status === 'notFunction' || !state.subject) {
     return (
-      <div style={styles.message}>
-        <p>{t.notFunction}</p>
+      <div style={styles.container}>
+        <div style={styles.message}>
+          <p>{t.notFunction}</p>
+        </div>
       </div>
     );
   }
 
+  const currentFnId = state.currentFnId;
   return (
     <div style={styles.container}>
-      <SubjectHeader entry={state.subject} t={t} onOpen={open} onOpenDiagram={openDiagram} diagramLabel={WEBVIEW_STRINGS[language].callDiagram.openForFunction} />
+      <SubjectHeader
+        entry={state.subject}
+        t={t}
+        onOpen={open}
+        onOpenDiagram={openDiagram}
+        diagramLabel={WEBVIEW_STRINGS[language].callDiagram.openForFunction}
+        cursor={pinned && !!currentFnId && state.subject.id === currentFnId}
+      />
       {state.lspLoading && <div style={styles.note}>{t.lspLoading}</div>}
       {state.nameOnly && <div style={styles.note}>{t.nameOnly}</div>}
       <CallSection
@@ -106,6 +127,7 @@ export const CallsPanel: React.FC<Props> = ({ language, vscode }) => {
         empty={t.noCallers}
         direction="incoming"
         subjectId={subjectId}
+        currentFnId={currentFnId}
         roots={state.incoming}
         expanded={expanded}
         childrenState={children}
@@ -118,6 +140,7 @@ export const CallsPanel: React.FC<Props> = ({ language, vscode }) => {
         empty={t.noCallees}
         direction="outgoing"
         subjectId={subjectId}
+        currentFnId={currentFnId}
         roots={state.outgoing}
         expanded={expanded}
         childrenState={children}
@@ -159,10 +182,16 @@ const SubjectHeader: React.FC<{
   onOpen: (e: CallEntry) => void;
   onOpenDiagram: (e: CallEntry) => void;
   diagramLabel: string;
-}> = ({ entry, t, onOpen, onOpenDiagram, diagramLabel }) => (
-  <div style={styles.subject} onClick={() => onOpen(entry)} title={entry.file}>
+  cursor: boolean;
+}> = ({ entry, t, onOpen, onOpenDiagram, diagramLabel, cursor }) => (
+  <div style={{ ...styles.subject, ...(cursor ? styles.cursorRow : {}) }} onClick={() => onOpen(entry)} title={entry.file}>
     <div style={styles.subjectTitle}>
       <Icon path={mdiFunctionVariant} size={0.75} /> {entry.label}
+      {cursor && (
+        <span title={t.cursorHere} style={styles.cursorIcon}>
+          <Icon path={mdiCrosshairsGps} size={0.6} />
+        </span>
+      )}
       <span
         role="button"
         title={diagramLabel}
@@ -187,6 +216,7 @@ interface SectionProps {
   empty: string;
   direction: CallDirection;
   subjectId: string;
+  currentFnId?: string;
   roots: CallEntry[];
   expanded: Set<string>;
   childrenState: Map<string, ChildrenState>;
@@ -195,7 +225,7 @@ interface SectionProps {
   t: CallStrings;
 }
 
-const CallSection: React.FC<SectionProps> = ({ title, empty, direction, subjectId, roots, expanded, childrenState, onToggle, onOpen, t }) => {
+const CallSection: React.FC<SectionProps> = ({ title, empty, direction, subjectId, currentFnId, roots, expanded, childrenState, onToggle, onOpen, t }) => {
   const rows = useMemo(
     () => buildCallTreeRows(direction, subjectId, roots, expanded, childrenState),
     [direction, subjectId, roots, expanded, childrenState]
@@ -208,8 +238,13 @@ const CallSection: React.FC<SectionProps> = ({ title, empty, direction, subjectI
       {rows.length === 0 && <div style={styles.empty}>{empty}</div>}
       {rows.map((row) => {
         const inferred = row.entry.confidence === 'inferred';
+        const cursor = !!currentFnId && row.entry.id === currentFnId;
         return (
-          <div key={row.key} style={{ ...styles.row, paddingLeft: 6 + row.depth * 14 }} title={row.entry.location ? t.declarative : row.entry.file}>
+          <div
+            key={row.key}
+            style={{ ...styles.row, ...(cursor ? styles.cursorRow : {}), paddingLeft: 6 + row.depth * 14 }}
+            title={row.entry.location ? t.declarative : row.entry.file}
+          >
             <span
               style={{ ...styles.chevron, visibility: row.canExpand ? 'visible' : 'hidden' }}
               onClick={() => onToggle(direction, row.key, row.entry)}
@@ -219,6 +254,11 @@ const CallSection: React.FC<SectionProps> = ({ title, empty, direction, subjectI
             <span style={styles.rowMain} onClick={() => onOpen(row.entry)}>
               <Icon path={row.entry.location ? mdiFileCodeOutline : mdiFunctionVariant} size={0.65} />
               <span style={{ ...styles.label, ...(inferred ? styles.inferredLabel : {}) }}>{row.entry.label}</span>
+              {cursor && (
+                <span title={t.cursorHere} style={styles.cursorIcon}>
+                  <Icon path={mdiCrosshairsGps} size={0.6} />
+                </span>
+              )}
               {inferred && (
                 <span style={styles.tag} title={t.inferredHint}>
                   {t.inferred}
@@ -264,4 +304,9 @@ const styles: Record<string, React.CSSProperties> = {
   badge: { fontWeight: 600, fontSize: 11 },
   muted: { color: 'var(--vscode-descriptionForeground)', fontSize: 11 },
   diagramButton: { marginLeft: 'auto', display: 'inline-flex', cursor: 'pointer', opacity: 0.8 },
+  cursorRow: {
+    boxShadow: 'inset 3px 0 0 var(--vscode-editorCursor-foreground, var(--vscode-focusBorder))',
+    background: 'var(--vscode-list-inactiveSelectionBackground)',
+  },
+  cursorIcon: { display: 'inline-flex', color: 'var(--vscode-editorCursor-foreground, var(--vscode-focusBorder))' },
 };

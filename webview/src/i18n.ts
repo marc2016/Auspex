@@ -195,6 +195,11 @@ export const WEBVIEW_STRINGS = {
       focusCallees: 'Aufgerufene',
       focusAll: 'alle',
       focusLeave: 'Fokus beenden',
+      pin: 'Diagramm anpinnen (Fokus und Layout festhalten)',
+      unpin: 'Diagramm lösen (dem Cursor folgen)',
+      cursorHere: 'Hier steht der Cursor',
+      cursorOutside: (label: string) => `${label} liegt außerhalb des Diagramms`,
+      focusHere: 'Hier fokussieren',
       focusLarge: (n: number) => `${n} Funktionen im Fokus - eine kleinere Tiefe macht das Diagramm übersichtlicher.`,
     },
     calls: {
@@ -213,6 +218,8 @@ export const WEBVIEW_STRINGS = {
       nameOnly: 'Für diese Sprache gibt es nur namensbasierte Auflösung durch Auspex.',
       declarative: 'Verweis in Nicht-Code-Datei',
       loc: 'LOC',
+      notAnalyzed: (label: string) => `${label}: Für diese Funktion gibt es noch keine Aufrufdaten. Speichern der Datei analysiert sie.`,
+      cursorHere: 'Hier steht der Cursor',
     },
     knowledge: {
       title: 'Monopolwissen & Wissensverteilung',
@@ -515,6 +522,11 @@ export const WEBVIEW_STRINGS = {
       focusCallees: 'Callees',
       focusAll: 'all',
       focusLeave: 'Leave focus',
+      pin: 'Pin diagram (keep focus and layout)',
+      unpin: 'Unpin diagram (follow the cursor)',
+      cursorHere: 'Cursor is here',
+      cursorOutside: (label: string) => `${label} is outside the diagram`,
+      focusHere: 'Focus here',
       focusLarge: (n: number) => `${n} functions in focus - a lower depth makes the diagram easier to read.`,
     },
     calls: {
@@ -533,6 +545,8 @@ export const WEBVIEW_STRINGS = {
       nameOnly: 'Only Auspex name-based resolution is available for this language.',
       declarative: 'Reference in non-code file',
       loc: 'LOC',
+      notAnalyzed: (label: string) => `${label}: No call data for this function yet. Saving the file analyzes it.`,
+      cursorHere: 'Cursor is here',
     },
     knowledge: {
       title: 'Knowledge Monopolies & Ownership',

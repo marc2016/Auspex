@@ -211,3 +211,29 @@ export function layoutRequestFor(state: {
   if (!state.data) return undefined;
   return { data: state.data, folderPath: state.folderPath || undefined };
 }
+
+// ---- live mode: cursor marker -----------------------------------------------------------------
+
+type Rect = { x0: number; y0: number; x1: number; y1: number };
+
+/**
+ * Minimal pan (diagram units) that brings a box fully into the viewport, with a margin; null when
+ * the box is already completely visible. Positive dx/dy means the view has to move right/down.
+ * A box larger than the viewport is aligned to its top-left corner.
+ */
+export function panIntoView(box: Rect, view: Rect, margin = 0): { dx: number; dy: number } | null {
+  const axis = (b0: number, b1: number, v0: number, v1: number): number => {
+    if (b0 >= v0 && b1 <= v1) return 0;
+    if (b1 - b0 + 2 * margin > v1 - v0 || b0 < v0) return b0 - margin - v0;
+    return b1 + margin - v1;
+  };
+  const dx = axis(box.x0, box.x1, view.x0, view.x1);
+  const dy = axis(box.y0, box.y1, view.y0, view.y1);
+  return dx === 0 && dy === 0 ? null : { dx, dy };
+}
+
+/** True if the function at the cursor has call data but is not part of the laid-out diagram. */
+export function isCursorOutside(layout: DiagramLayout | null, fnId: string | null | undefined): boolean {
+  if (!layout || !fnId) return false;
+  return !layout.nodes.some((n) => n.key === fnId);
+}

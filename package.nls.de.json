@@ -18,5 +18,11 @@
   "views.couplingView": "Auspex Kopplung",
   "views.knowledgeView": "Auspex Monopolwissen",
   "views.callsView": "Auspex Aufrufe",
-  "command.toggleEditorHealth": "Auspex: Code Health im Editor an/ausschalten"
+  "command.toggleEditorHealth": "Auspex: Code Health im Editor an/ausschalten",
+  "command.toggleLiveCalls": "Auspex: Live-Aufrufe umschalten",
+  "command.liveCallsOn": "Live-Modus einschalten (dem Cursor folgen)",
+  "command.liveCallsOff": "Live-Modus ausschalten",
+  "command.pinCalls": "Aufrufe-Ansicht anpinnen",
+  "command.unpinCalls": "Aufrufe-Ansicht lösen",
+  "config.calls.liveMode": "Live-Modus: Die Aufrufe-Ansicht und Aufrufdiagramm-Tabs folgen der Funktion an der Textmarke."
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   zoomBand, aggregationDepth, aggregateEdges, functionColor, neighborsOf, applyFilters, restoreSelection, cullToViewport,
+  panIntoView, isCursorOutside,
 } from '../webview/src/utils/callDiagram/view';
 import { getHeatColor } from '../webview/src/components/TreemapViewer';
 import { getCodeHealthColor } from '../webview/src/components/SystemMapViewer';
@@ -106,5 +107,29 @@ describe('focus helpers', () => {
   it('labels functions with their qualified name', () => {
     expect(functionLabel(data, 'a.js#Cart.add')).toBe('Cart.add');
     expect(functionLabel(null, 'b.js#x')).toBe('x');
+  });
+});
+
+describe('cursor marker', () => {
+  const view = { x0: 0, y0: 0, x1: 100, y1: 100 };
+
+  it('does not pan when the box is visible', () => {
+    expect(panIntoView({ x0: 10, y0: 10, x1: 50, y1: 50 }, view, 5)).toBeNull();
+  });
+
+  it('pans by the minimal delta when the box is outside', () => {
+    expect(panIntoView({ x0: 150, y0: 10, x1: 180, y1: 40 }, view, 5)).toEqual({ dx: 85, dy: 0 });
+    expect(panIntoView({ x0: -40, y0: 120, x1: -10, y1: 140 }, view, 5)).toEqual({ dx: -45, dy: 45 });
+  });
+
+  it('aligns a box larger than the viewport to its top-left corner', () => {
+    expect(panIntoView({ x0: 50, y0: 0, x1: 300, y1: 50 }, view, 5)).toEqual({ dx: 45, dy: 0 });
+  });
+
+  it('detects a cursor function outside the diagram', () => {
+    expect(isCursorOutside(layout, 'a1')).toBe(false);
+    expect(isCursorOutside(layout, 'zz')).toBe(true);
+    expect(isCursorOutside(layout, null)).toBe(false);
+    expect(isCursorOutside(null, 'zz')).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const panels: any[] = [];
 const executeCommand = vi.fn();
@@ -177,5 +177,82 @@ describe('CallDiagramPanel focus', () => {
     CallDiagramPanel.open({ fsPath: '/ext' } as any, '/ws/shop', '', snapshot);
     await panels[0].onMessage({ type: 'openCallDiagram', focus: { file: 'src/cart/cart.js', startLine: 1 } });
     expect(executeCommand).toHaveBeenCalledWith('auspex.openCallDiagram', { focus: { file: 'src/cart/cart.js', startLine: 1 } });
+  });
+});
+
+describe('CallDiagramPanel live mode and pin', () => {
+  const cf = (fnId: string | undefined, qualifiedName = 'persist') => ({ file: 'src/store/store.js', qualifiedName, fnId, startLine: 1, endLine: 3 });
+  const sent = (i: number) => panels[i].webview.postMessage.mock.calls.map((c: any[]) => c[0]);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    CallDiagramPanel.broadcastLive(false);
+    for (const p of [...CallDiagramPanel.instances]) p.dispose();
+    panels.length = 0;
+  });
+
+  afterEach(() => vi.useRealTimers());
+
+  async function openFocused() {
+    CallDiagramPanel.open({ fsPath: '/ext' } as any, '/ws/shop', '', snapshot, {}, { fnId: 'src/cart/cart.js#save', label: 'save' });
+    const i = panels.length - 1;
+    await panels[i].onMessage({ type: 'ready' });
+    panels[i].webview.postMessage.mockClear();
+    return i;
+  }
+
+  it('re-focuses an unpinned focus tab after the debounce, keeping depths', async () => {
+    const i = await openFocused();
+    CallDiagramPanel.broadcastCurrentFunction(cf('src/cart/cart.js#save', 'save'));
+    CallDiagramPanel.broadcastCurrentFunction(cf('src/store/store.js#persist'));
+    expect(sent(i).map((m: any) => m.type)).toEqual(['diagram:cursor', 'diagram:cursor']);
+    vi.advanceTimersByTime(400);
+    expect(sent(i).filter((m: any) => m.type === 'diagram:focus')).toEqual([
+      { type: 'diagram:focus', payload: { fnId: 'src/store/store.js#persist', label: 'persist', keepDepths: true } },
+    ]);
+  });
+
+  it('only marks the function in scope tabs and pinned focus tabs', async () => {
+    CallDiagramPanel.open({ fsPath: '/ext' } as any, '/ws/shop', '', snapshot);
+    await panels[0].onMessage({ type: 'ready' });
+    panels[0].webview.postMessage.mockClear();
+    const i = await openFocused();
+    await panels[i].onMessage({ type: 'setPinned', pinned: true });
+
+    CallDiagramPanel.broadcastCurrentFunction(cf('src/store/store.js#persist'));
+    vi.advanceTimersByTime(1000);
+    for (const p of [0, i]) {
+      expect(sent(p)).toEqual([{ type: 'diagram:cursor', payload: { fnId: 'src/store/store.js#persist', label: 'persist' } }]);
+    }
+  });
+
+  it('does not re-focus on a function without call data', async () => {
+    const i = await openFocused();
+    CallDiagramPanel.broadcastCurrentFunction(cf(undefined, 'clear'));
+    vi.advanceTimersByTime(1000);
+    expect(sent(i)).toEqual([{ type: 'diagram:cursor', payload: { fnId: null, label: 'clear' } }]);
+  });
+
+  it('re-focuses on unpin while live, and "Focus here" keeps the pin', async () => {
+    const i = await openFocused();
+    await panels[i].onMessage({ type: 'setPinned', pinned: true });
+    CallDiagramPanel.broadcastCurrentFunction(cf('src/store/store.js#persist'));
+    await panels[i].onMessage({ type: 'focusHere' });
+    const inst = [...CallDiagramPanel.instances].pop()!;
+    expect(inst.pinned).toBe(true);
+    expect(sent(i).filter((m: any) => m.type === 'diagram:focus')).toHaveLength(1);
+
+    await panels[i].onMessage({ type: 'setPinned', pinned: false });
+    expect(inst.pinned).toBe(false);
+    expect(sent(i).filter((m: any) => m.type === 'diagram:focus')).toHaveLength(2);
+  });
+
+  it('sends the marker to new tabs and clears markers when live mode is switched off', async () => {
+    CallDiagramPanel.broadcastCurrentFunction(cf('src/store/store.js#persist'));
+    CallDiagramPanel.open({ fsPath: '/ext' } as any, '/ws/shop', '', snapshot);
+    await panels[0].onMessage({ type: 'ready' });
+    expect(sent(0)).toContainEqual({ type: 'diagram:cursor', payload: { fnId: 'src/store/store.js#persist', label: 'persist' } });
+    CallDiagramPanel.broadcastLive(false);
+    expect(sent(0).pop()).toEqual({ type: 'diagram:cursor', payload: { fnId: null, label: null } });
   });
 });

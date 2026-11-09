@@ -30,6 +30,7 @@ import { AuspexCallsViewProvider } from './providers/CallsViewProvider';
 import { CallDiagramPanel, type CallDiagramFocusTarget } from './panels/CallDiagramPanel';
 import { focusTargetAt, parseOpenCallDiagramArg } from './analyzer/calls/focus';
 import { formatDeclarativeReport, hasDeclarativeReport } from './analyzer/declarative/report';
+import { LiveCallTracker, isLiveModeEnabled, setLiveMode } from './editor/liveCallTracker';
 
 let pipeline: AuspexPipeline;
 let storage: AuspexStorage | null = null;
@@ -49,7 +50,10 @@ let latestSelectedNode: TreeNode | null = null;
 let editorHealthDecorator: EditorHealthDecorator;
 let healthCodeLensProvider: HealthCodeLensProvider;
 let updateDetailsForEditor: (editor: vscode.TextEditor | undefined) => void;
-let setSelectedNodeAcrossProviders: (node: TreeNode | null, reveal?: boolean) => void;
+/** `explicit`: chosen by the user (treemap, diagram, CodeLens); `editor`: follows the active editor. */
+type SelectionSource = 'explicit' | 'editor';
+let setSelectedNodeAcrossProviders: (node: TreeNode | null, reveal?: boolean, source?: SelectionSource) => void;
+let liveCallTracker: LiveCallTracker | null = null;
 let applyCurrentScopeAndDistribute: (scope?: AuspexScope) => Promise<void>;
 /** Parsed files with call sites, loaded lazily for call graph updates on save; reset by each scan. */
 let callFileCache: Record<string, ParsedFileInfo> | null = null;
@@ -294,6 +298,25 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(AuspexCallsViewProvider.viewType, callsViewProvider)
   );
+  void vscode.commands.executeCommand('setContext', 'auspex.callsPinned', false);
+
+  // Live mode: the function at the text cursor drives the Calls view and the call diagram tabs
+  liveCallTracker = new LiveCallTracker({
+    workspacePath,
+    getGraphFunctions: () => callGraphService.graph?.functions ?? [],
+  });
+  context.subscriptions.push(liveCallTracker);
+  callsViewProvider.setLive(liveCallTracker.enabled);
+  liveCallTracker.onDidChangeCurrentFunction((cf) => {
+    callsViewProvider.setCurrentFunction(cf);
+    CallDiagramPanel.broadcastCurrentFunction(cf);
+  });
+  liveCallTracker.onDidChangeEnabled((live) => {
+    callsViewProvider.setLive(live);
+    CallDiagramPanel.broadcastLive(live);
+  });
+  const unsubscribeLiveGraph = callGraphService.onDidChange(() => liveCallTracker?.notifyGraphChanged());
+  context.subscriptions.push({ dispose: unsubscribeLiveGraph });
 
   // Editor Gutter Health Decorator & CodeLens Provider
   editorHealthDecorator = new EditorHealthDecorator(context.extensionUri, workspacePath);
@@ -379,6 +402,15 @@ export async function activate(context: vscode.ExtensionContext) {
       setSelectedNodeAcrossProviders(node, false);
       await vscode.commands.executeCommand('auspex.callsView.focus');
     })
+  );
+
+  const setLive = (enabled: boolean) => setLiveMode(enabled);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('auspex.toggleLiveCalls', () => setLive(!isLiveModeEnabled())),
+    vscode.commands.registerCommand('auspex.liveCallsOn', () => setLive(true)),
+    vscode.commands.registerCommand('auspex.liveCallsOff', () => setLive(false)),
+    vscode.commands.registerCommand('auspex.pinCalls', () => callsViewProvider.setPinned(true)),
+    vscode.commands.registerCommand('auspex.unpinCalls', () => callsViewProvider.setPinned(false))
   );
 
   context.subscriptions.push(
@@ -536,7 +568,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   // 5. Track Active Editor to automatically update Details Sidebar
-  setSelectedNodeAcrossProviders = (node: TreeNode | null, reveal = true) => {
+  setSelectedNodeAcrossProviders = (node: TreeNode | null, reveal = true, source: SelectionSource = 'explicit') => {
     latestSelectedNode = node;
     vscode.commands.executeCommand('setContext', 'auspex.hasSelectedFile', !!node);
     sidebarProvider.setSelectedNode(node);
@@ -544,7 +576,7 @@ export async function activate(context: vscode.ExtensionContext) {
     healthViewProvider.setSelectedNode(node, reveal);
     couplingViewProvider.setSelectedNode(node, reveal);
     knowledgeViewProvider.setSelectedNode(node, reveal);
-    callsViewProvider.setSelectedNode(node, false);
+    callsViewProvider.applySelection(node, source);
   };
 
   updateDetailsForEditor = (editor: vscode.TextEditor | undefined) => {
@@ -560,7 +592,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const node = findFileNode(latestSnapshot.tree, relPath);
     if (node) {
-      setSelectedNodeAcrossProviders(node, false);
+      setSelectedNodeAcrossProviders(node, false, 'editor');
     }
   };
 
@@ -607,9 +639,10 @@ export async function activate(context: vscode.ExtensionContext) {
     if (latestSelectedNode) {
       const selectedRelPath = (latestSelectedNode.path || '').split('#')[0].replace(/^\//, '');
       if (selectedRelPath === relPath && fileNode) {
-        setSelectedNodeAcrossProviders(fileNode, false);
+        setSelectedNodeAcrossProviders(fileNode, false, 'editor');
       }
     }
+    liveCallTracker?.notifyParsed(parsed);
     return parsed;
   };
 

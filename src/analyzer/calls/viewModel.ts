@@ -33,7 +33,7 @@ export interface CallEntry {
   expandable: boolean;
 }
 
-export type CallsViewStatus = 'noScan' | 'notFunction' | 'ready';
+export type CallsViewStatus = 'noScan' | 'notFunction' | 'notAnalyzed' | 'ready';
 
 export interface CallsViewState {
   status: CallsViewStatus;
@@ -44,6 +44,14 @@ export interface CallsViewState {
   lspLoading: boolean;
   /** Only Auspex's name-based resolution is available for the subject. */
   nameOnly: boolean;
+  /** Label of a function at the cursor that has no call data yet (status `notAnalyzed`). */
+  pendingLabel?: string;
+  /** The view keeps its subject (pinned). */
+  pinned?: boolean;
+  /** Live mode is on. */
+  live?: boolean;
+  /** Function at the text cursor (live mode), marked in the trees. */
+  currentFnId?: FunctionId;
 }
 
 function metricsFor(tree: TreeNode | null, graph: CallGraph, id: FunctionId) {

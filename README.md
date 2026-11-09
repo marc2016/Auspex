@@ -74,6 +74,8 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
 - A CodeLens above each function shows the number of known callers and callees (e.g. `5 callers | 3 calls`) and opens the Calls view.
 - Calls are resolved by Auspex itself for JavaScript/TypeScript: ES `import`s and `require` of relative modules, `this.x()` / `self.x()` calls inside constructors, calls across AMD `define()` modules, and receivers with a known type (`new X()` or a TypeScript annotation such as `index: FunctionIndex`). Calls matched only by name are marked as **inferred**; built-in methods like `map.get()` or `list.push()` on objects of unknown type and ambiguous method names produce no edge.
 - Language servers (VS Code call hierarchy) add precise calls for the selected function on demand; with `auspex.calls.languageServer: "background"` the calls of all functions are collected after each scan (cancellable, cached per file).
+- **Live mode** (on by default, toggle in the Calls view title bar or *Auspex: Toggle Live Calls*): the Calls view follows the function at the text cursor - click into a function, move with the keyboard or jump with *Go to Definition*, and its calls are shown right away (nested functions included, also with unsaved edits). Clicking a caller in the Calls view opens it and makes it the new subject, so you can walk along the call chain. A cursor outside any function keeps the last function; switching files no longer clears the view.
+- **Pin**: the pin in the Calls view title bar keeps the current function, whatever you click or select elsewhere. While pinned and live, the entry of the function at the cursor is marked with a location icon. Unpinning jumps to the function at the cursor.
 
 ### 🕸️ Call Diagram (Editor Tab)
 - `Auspex: Open Call Diagram` opens the functions of the workspace as boxes nested in frames for folders, namespaces, files and classes, connected by their calls - in its own editor tab. Open several diagrams side by side, e.g. one per folder via **Open call diagram for folder** in the details view or the diagram button in the Calls view.
@@ -82,6 +84,7 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
 - Click a function to highlight its callers and callees (and select it in the other Auspex views), double-click to open it in the editor.
 - Filters: hide inferred edges, show only hotspots, restrict to a folder. The diagram updates automatically after scans and saves, keeping zoom and selection.
 - **Focus on a function**: select a function and click **Focus** (or use the diagram button in the Calls view, the **In diagram** CodeLens, or *Auspex: Show Calls in Diagram* in the editor context menu). The diagram then shows only the callers above and the callees below that function, with separate depths (0-10 or all, default 2/2). Functions with more callers or callees beyond the depth show "+N", and a warning appears above 300 functions.
+- **Live mode and pin**: in live mode, a focused diagram re-focuses on the function at the text cursor (keeping its depths), and a workspace or folder diagram marks that function and scrolls it into view. Each diagram tab has its own pin (in the focus bar or toolbar): a pinned diagram keeps its focus and layout, but still marks where you are with a dashed outline and pans to it only when it is off-screen. If the function is outside a pinned focus, the focus bar says so and offers **Focus here**.
 
 ### 🧩 References from XML Files
 - JavaScript handlers referenced in XML-based files of your own formats (any file extension) appear as **callers** in the Calls view and count towards the call CodeLens.
@@ -179,6 +182,7 @@ Auspex contributes the following commands to the VS Code Command Palette:
 | `Auspex: Open Call Diagram` | `auspex.openCallDiagram` | Opens a call diagram editor tab for the workspace (or a folder). |
 | `Auspex: Show Calls in Diagram` | `auspex.focusInCallDiagram` | Opens a call diagram focused on the function at the cursor (also in the editor context menu). |
 | `Auspex: Show Calls` | `auspex.showCalls` | Shows a function in the Calls view (used by the call count CodeLens). |
+| `Auspex: Toggle Live Calls` | `auspex.toggleLiveCalls` | Switches live mode (Calls view and call diagrams follow the function at the cursor) on or off. |
 | `Auspex: Open Guide & Documentation` | `auspex.openHelp` | Opens the built-in Auspex user guide and documentation. |
 | `Auspex: Set Jira API Token` | `auspex.setJiraToken` | Safely saves your Jira API token in the OS Keychain. |
 | `Auspex: Clear Jira API Token` | `auspex.clearJiraToken` | Deletes the stored Jira API token. |
@@ -196,6 +200,7 @@ You can customize Auspex in VS Code Settings (`Cmd+,` / `Ctrl+,` → search for 
 | `auspex.declarativeReferences` | `object[]` | `[]` | Rules for JS references in XML-based files: `files` (glob or list), `attributes`, `elements`, `fileAttribute` + `functionAttribute`. |
 | `auspex.declarativeReferences.heuristic` | `boolean` | `false` | Also scan unconfigured XML-like files for code-like references (always inferred). |
 | `auspex.calls.languageServer` | `string` | `"onDemand"` | Use of language servers for calls: `onDemand` (selected function in the Calls view), `background` (all functions after each scan) or `off` (Auspex resolution only). |
+| `auspex.calls.liveMode` | `boolean` | `true` | Live mode: the Calls view and call diagram tabs follow the function at the text cursor. |
 | `auspex.jira.enabled` | `boolean` | `false` | Enable read-only Jira integration to enrich defect detection. |
 | `auspex.jira.host` | `string` | `""` | URL of your Jira instance (e.g. `https://company.atlassian.net`). |
 | `auspex.jira.email` | `string` | `""` | Account email for Jira Cloud authentication (leave blank for PAT). |

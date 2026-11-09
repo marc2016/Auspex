@@ -160,4 +160,92 @@ describe('AuspexCallsViewProvider', () => {
     expect(queryDetailed).not.toHaveBeenCalled();
     expect(lastState().nameOnly).toBe(true);
   });
+  describe('live mode and pin', () => {
+    const cf = (qualifiedName: string, fnId?: string) => ({ file: 'src/cart.js', qualifiedName, fnId, startLine: 2, endLine: 4 });
+
+    it('follows the function at the cursor', () => {
+      provider.updateSnapshot(snapshot);
+      provider.setCurrentFunction(cf('Cart.add', 'src/cart.js#Cart.add'));
+      expect(lastState()).toMatchObject({ status: 'ready', live: true, currentFnId: 'src/cart.js#Cart.add' });
+      expect(lastState().subject.id).toBe('src/cart.js#Cart.add');
+      expect(queryDetailed).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows a not-analyzed state for a function without call data', () => {
+      provider.updateSnapshot(snapshot);
+      provider.setCurrentFunction(cf('Cart.clear'));
+      expect(lastState()).toMatchObject({ status: 'notAnalyzed', pendingLabel: 'Cart.clear' });
+    });
+
+    it('lets the latest of cursor and explicit selection win', () => {
+      provider.updateSnapshot(snapshot);
+      provider.setCurrentFunction(cf('Cart.add', 'src/cart.js#Cart.add'));
+      provider.setSelectedNode(findMethod(snapshot.tree, 'validate()'), false);
+      expect(lastState().subject.id).toBe('src/cart.js#Cart.validate');
+      provider.setCurrentFunction(cf('submit', 'src/order.js#submit'));
+      expect(lastState().subject.id).toBe('src/order.js#submit');
+    });
+
+    it('keeps the pinned subject and marks the current function', async () => {
+      provider.updateSnapshot(snapshot);
+      provider.setSelectedNode(findMethod(snapshot.tree, 'add()'), false);
+      provider.setPinned(true);
+      expect(executeCommand).toHaveBeenCalledWith('setContext', 'auspex.callsPinned', true);
+      provider.setCurrentFunction(cf('Cart.validate', 'src/cart.js#Cart.validate'));
+      provider.setSelectedNode(findMethod(snapshot.tree, 'submit()'), false);
+      expect(lastState()).toMatchObject({ pinned: true, currentFnId: 'src/cart.js#Cart.validate' });
+      expect(lastState().subject.id).toBe('src/cart.js#Cart.add');
+    });
+
+    it('stays pinned when an entry in the view is clicked (file opens, cursor moves)', async () => {
+      provider.updateSnapshot(snapshot);
+      provider.setSelectedNode(findMethod(snapshot.tree, 'add()'), false);
+      provider.setPinned(true);
+      // click on the caller "submit": opens the file, the editor switch and the cursor follow
+      await provider.handleMessage({ type: 'openFile', filePath: 'src/order.js', startLine: 1, endLine: 3 });
+      provider.applySelection({ ...snapshot.tree, type: 'file', path: 'src/order.js' } as TreeNode, 'editor');
+      provider.setCurrentFunction(cf('submit', 'src/order.js#submit'));
+      expect(provider.pinned).toBe(true);
+      expect(lastState()).toMatchObject({ pinned: true, currentFnId: 'src/order.js#submit' });
+      expect(lastState().subject.id).toBe('src/cart.js#Cart.add');
+    });
+
+    it('jumps to the current function when unpinned while live', () => {
+      provider.updateSnapshot(snapshot);
+      provider.setSelectedNode(findMethod(snapshot.tree, 'add()'), false);
+      provider.setPinned(true);
+      provider.setCurrentFunction(cf('submit', 'src/order.js#submit'));
+      provider.setPinned(false);
+      expect(lastState()).toMatchObject({ pinned: false });
+      expect(lastState().subject.id).toBe('src/order.js#submit');
+    });
+
+    it('keeps the subject when unpinned without live mode and clears the marker when live is off', () => {
+      provider.updateSnapshot(snapshot);
+      provider.setSelectedNode(findMethod(snapshot.tree, 'add()'), false);
+      provider.setCurrentFunction(cf('Cart.add', 'src/cart.js#Cart.add'));
+      provider.setLive(false);
+      expect(lastState().currentFnId).toBeUndefined();
+      provider.setPinned(true);
+      provider.setPinned(false);
+      expect(lastState().subject.id).toBe('src/cart.js#Cart.add');
+    });
+
+    it('keeps the subject on editor switches but shows the hint for an explicit file selection', () => {
+      provider.updateSnapshot(snapshot);
+      provider.setSelectedNode(findMethod(snapshot.tree, 'add()'), false);
+      const fileNode = { ...snapshot.tree, type: 'file', path: 'src/order.js' } as TreeNode;
+      provider.applySelection(fileNode, 'editor');
+      expect(lastState().subject.id).toBe('src/cart.js#Cart.add');
+      provider.applySelection(fileNode, 'explicit');
+      expect(lastState().status).toBe('notFunction');
+    });
+
+    it('keeps the last subject when no further event arrives', () => {
+      provider.updateSnapshot(snapshot);
+      provider.setCurrentFunction(cf('Cart.add', 'src/cart.js#Cart.add'));
+      provider.updateSnapshot(snapshot);
+      expect(lastState().subject.id).toBe('src/cart.js#Cart.add');
+    });
+  });
 });

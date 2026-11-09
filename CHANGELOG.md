@@ -27,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Filters (hide inferred edges, hotspots only, folder) and automatic updates after scans and saves; layout computed in a Web Worker (new dependency `elkjs`).
   - Entry points: "Open call diagram for folder" in the details view.
   - **Focus mode**: show only the callers (upwards) and callees (downwards) of one function with separate depths (0-10 or all), "+N" markers for calls beyond the depth and a warning above 300 functions; started from the diagram, the Calls view, an "In diagram" CodeLens or the editor context menu (`auspex.focusInCallDiagram`).
+- **Live Calls and Pin**:
+  - Live mode (`auspex.calls.liveMode`, on by default; toggle in the Calls view title bar or `auspex.toggleLiveCalls`): the Calls view and call diagram tabs follow the function at the text cursor (innermost function, debounced, matched by name so unsaved line shifts do not matter; new unsaved functions show a "save to analyze" hint).
+  - Pin for the Calls view (title bar) and per call diagram tab (focus bar/toolbar): pinned targets keep their content; the function at the cursor is still marked (location icon in the Calls view, dashed outline in the diagram, panned into view only when off-screen). A pinned focus shows "outside the diagram" with **Focus here**.
+  - Unpinned focus diagrams re-focus on the cursor function with the same depths; workspace/folder diagrams mark and scroll to it.
 - **References from XML Files**:
   - New setting `auspex.declarativeReferences` with rules for XML-based files of any extension (attributes, element text, file/function attribute pairs).
   - References (names, `Container.method`, JS expressions, file/function pairs) become callers in the Calls view and count towards the call CodeLens; ambiguous names are marked as inferred.
@@ -34,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Optional heuristic mode for unconfigured XML-like files (`auspex.declarativeReferences.heuristic`, off by default).
 
 ### Changed
+- Switching the active editor no longer replaces the function in the Calls view with the file (the view keeps its function).
 - **More precise call resolution**: ES imports and `require` of relative modules, `new X()` and TypeScript type annotations are used to resolve calls as certain; built-in method names on objects of unknown type (`map.get()`, `list.push()`, ...) and ambiguous method names no longer create inferred edges, and in ES modules unimported names are not linked to other files. On Auspex itself, inferred edges dropped from 55 % to 4 %. Call counts in CodeLens and the Calls view become smaller but more reliable.
 - **Treemap structure for constructor functions**: methods assigned to `this` were previously shown as nested helpers of the constructor body (`Cart > add()` under `Cart()`); they are now shown as `add()` directly under the `Cart` container. Code Health scores of affected files may change.
 - **Versioned analysis cache**: cached file results and stored snapshots record the analyzer version. Results from an older version are re-analyzed automatically, so the first scan after updating re-parses all files.
