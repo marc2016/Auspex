@@ -196,6 +196,8 @@ describe('AuspexPipeline', () => {
       const snap = await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
       expect(indexLoc(snap)).not.toBe(SENTINEL_LOC);
       expect(storage.loadFileCache()['src/index.ts'].analyzerVersion).toBe(ANALYZER_VERSION);
+      // re-parsed entries carry the data added in the current version (call sites)
+      expect(storage.loadFileCache()['src/index.ts'].callSites).toBeDefined();
     });
 
     it('re-analyzes a cached file result without version', async () => {
@@ -204,5 +206,20 @@ describe('AuspexPipeline', () => {
       const snap = await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
       expect(indexLoc(snap)).not.toBe(SENTINEL_LOC);
     });
+  });
+
+  it('builds a call graph for JavaScript files', async () => {
+    fs.writeFileSync(
+      path.join(tempWorkspace, 'src', 'cart.js'),
+      ['function Cart() {', '  this.add = function () {', '    this.validate();', '  };', '  this.validate = function () {', '    return true;', '  };', '}'].join('\n')
+    );
+    const snap = await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
+    expect(snap.callGraph?.edges).toContainEqual({
+      from: 'src/cart.js#Cart.add',
+      to: 'src/cart.js#Cart.validate',
+      confidence: 'certain',
+      source: 'js',
+    });
+    expect(snap.callGraph?.functions.map((f) => f.id)).toContain('src/index.ts#main');
   });
 });

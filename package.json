@@ -52,6 +52,10 @@
         "icon": "$(info)"
       },
       {
+        "command": "auspex.showCalls",
+        "title": "%command.showCalls%"
+      },
+      {
         "command": "auspex.setJiraToken",
         "title": "%command.setJiraToken%",
         "icon": "$(key)"
@@ -152,6 +156,11 @@
           "type": "webview",
           "id": "auspex.knowledgeView",
           "name": "%views.knowledgeView%"
+        },
+        {
+          "type": "webview",
+          "id": "auspex.callsView",
+          "name": "%views.callsView%"
         }
       ]
     },
@@ -237,6 +246,17 @@
           "type": "boolean",
           "default": true,
           "description": "Respect .gitignore files when collecting and analyzing workspace files."
+        },
+        "auspex.calls.languageServer": {
+          "type": "string",
+          "enum": ["onDemand", "background", "off"],
+          "enumDescriptions": [
+            "Query the language server for the calls of the function shown in the Calls view.",
+            "Additionally query the outgoing calls of all functions in the background after each scan (cancellable, cached per file).",
+            "Use only Auspex's own call resolution."
+          ],
+          "default": "onDemand",
+          "description": "How Auspex uses language servers (VS Code call hierarchy) to find calls between functions."
         }
       }
     }

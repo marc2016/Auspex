@@ -1,18 +1,27 @@
 import fs from 'fs';
 import path from 'path';
 import type { AnalysisSnapshot, ParsedFileInfo, JiraIssueInfo } from '../analyzer/types';
+import type { CallEdge } from '../analyzer/calls/types';
+
+/** Cached language server edges of one file, valid while the file hash is unchanged. */
+export interface LspCallCacheEntry {
+  fileHash: string;
+  edges: CallEdge[];
+}
 
 export class AuspexStorage {
   private baseDir: string;
   private snapshotFile: string;
   private fileCacheFile: string;
   private jiraCacheFile: string;
+  private lspCallCacheFile: string;
 
   constructor(storageDir: string) {
     this.baseDir = storageDir;
     this.snapshotFile = path.join(this.baseDir, 'snapshot.json');
     this.fileCacheFile = path.join(this.baseDir, 'file_cache.json');
     this.jiraCacheFile = path.join(this.baseDir, 'jira_cache.json');
+    this.lspCallCacheFile = path.join(this.baseDir, 'lsp_calls.json');
     this.ensureDir();
   }
 
@@ -86,6 +95,27 @@ export class AuspexStorage {
       fs.writeFileSync(this.jiraCacheFile, JSON.stringify(cache), 'utf-8');
     } catch (err) {
       console.warn('[Auspex] Failed to save jira cache:', err);
+    }
+  }
+
+  /** Language server call edges per file (outgoing edges of the file's functions), keyed by file path. */
+  loadLspCallCache(): Record<string, LspCallCacheEntry> {
+    try {
+      if (fs.existsSync(this.lspCallCacheFile)) {
+        return JSON.parse(fs.readFileSync(this.lspCallCacheFile, 'utf-8')) as Record<string, LspCallCacheEntry>;
+      }
+    } catch {
+      /* ignore */
+    }
+    return {};
+  }
+
+  saveLspCallCache(cache: Record<string, LspCallCacheEntry>): void {
+    try {
+      this.ensureDir();
+      fs.writeFileSync(this.lspCallCacheFile, JSON.stringify(cache), 'utf-8');
+    } catch (err) {
+      console.warn('[Auspex] Failed to save language server call cache:', err);
     }
   }
 }

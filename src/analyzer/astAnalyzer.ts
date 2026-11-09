@@ -10,6 +10,7 @@ export interface CollectFilesOptions {
 
 import { CodeHealthAnalyzer } from './codeHealth';
 import { extractorRegistry } from './extractors/registry';
+import { extractCallSites, extractAmdDependencies } from './calls/callSiteExtractor';
 
 export const DEFAULT_IGNORE_PATTERNS = [
   'node_modules',
@@ -289,6 +290,7 @@ export class AstStructureAnalyzer {
 
     const { namespace, classes, methods } = this.extractStructure(lines, lang);
     const healthResult = this.codeHealthAnalyzer.analyzeFile(lines, methods, classes, lang);
+    const calls = this.extractCalls(lines, methods, lang);
 
     return {
       filePath: relPath,
@@ -300,6 +302,7 @@ export class AstStructureAnalyzer {
       lastModifiedAt,
       codeHealth: healthResult.score,
       biomarkers: healthResult.biomarkers,
+      ...calls,
     };
   }
 
@@ -387,6 +390,18 @@ export class AstStructureAnalyzer {
     }
 
     return this.analyzeSource(content, relPath, lastModifiedAt);
+  }
+
+  /** Call sites and AMD dependencies (JavaScript/TypeScript only). */
+  private extractCalls(
+    lines: string[],
+    methods: MethodInfo[],
+    lang: string
+  ): Pick<ParsedFileInfo, 'callSites' | 'amdDependencies'> {
+    if (lang !== 'javascript' && lang !== 'typescript') return {};
+    const amdDependencies = extractAmdDependencies(lines);
+    const callSites = extractCallSites(lines, methods, amdDependencies);
+    return amdDependencies ? { callSites, amdDependencies } : { callSites };
   }
 
   private extractStructure(

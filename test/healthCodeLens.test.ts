@@ -321,4 +321,50 @@ describe('HealthCodeLensProvider', () => {
     // 0-based line 2 is "this.add = function"
     expect(lensLines).toContain(2);
   });
+
+  describe('call count lens', () => {
+    const lines = [
+      'function Cart() {',
+      '  this.add = function (item) {',
+      '    return item;',
+      '  };',
+      '}',
+    ];
+    const buildTree = () => {
+      const { classes, methods } = new JavaScriptExtractor().extractStructures(lines, 'javascript');
+      return new TreeAggregator().buildTree(
+        [{ filePath: 'src/cart.js', classes, methods, loc: lines.length, fileHash: 'h' }],
+        new Map()
+      ).tree;
+    };
+    const doc = { uri: { scheme: 'file', fsPath: '/workspace/src/cart.js' }, lineCount: lines.length } as any;
+
+    it('shows caller and callee counts above known functions and opens the Calls view', () => {
+      const lookup = vi.fn((file: string, start: number) =>
+        file === 'src/cart.js' && start === 2 ? { callers: 5, callees: 3 } : undefined
+      );
+      const callProvider = new HealthCodeLensProvider('/workspace', lookup);
+      callProvider.updateTree(buildTree());
+      const lenses = callProvider.provideCodeLenses(doc, {} as any) as any[];
+      const callLens = lenses.find((l) => l.command.command === 'auspex.showCalls');
+      expect(callLens.command.title).toBe('5 callers | 3 calls');
+      expect(callLens.command.arguments).toEqual(['src/cart.js', 2]);
+      expect(callLens.range.start.line).toBe(1);
+      expect(lookup).toHaveBeenCalledWith('src/cart.js', 2, 4);
+    });
+
+    it('shows no call count lens when CodeLens is disabled', () => {
+      mockCodeLensConfig.enabled = false;
+      const callProvider = new HealthCodeLensProvider('/workspace', () => ({ callers: 1, callees: 1 }));
+      callProvider.updateTree(buildTree());
+      expect(callProvider.provideCodeLenses(doc, {} as any)).toEqual([]);
+    });
+
+    it('shows no call count lens for functions without call data', () => {
+      const callProvider = new HealthCodeLensProvider('/workspace', () => undefined);
+      callProvider.updateTree(buildTree());
+      const lenses = callProvider.provideCodeLenses(doc, {} as any) as any[];
+      expect(lenses.some((l) => l.command.command === 'auspex.showCalls')).toBe(false);
+    });
+  });
 });

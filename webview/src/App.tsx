@@ -5,6 +5,7 @@ import { SystemMapViewer } from './components/SystemMapViewer';
 import { CouplingGraphViewer } from './components/CouplingGraphViewer';
 import { TreemapDetailsPanel } from './components/TreemapDetailsPanel';
 import { CouplingPanel } from './components/CouplingPanel';
+import { CallsPanel } from './components/CallsPanel';
 import { KnowledgePanel } from './components/KnowledgePanel';
 import { TopBar } from './components/TopBar';
 import { Icon } from './components/Icon';
@@ -72,13 +73,14 @@ export const App: React.FC = () => {
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(null);
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
   const [selectedNode, setSelectedNode] = useState<TreeNode | null>(null);
-  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health' | 'coupling' | 'knowledge'>(() => {
+  const [viewModeType, setViewModeType] = useState<'main' | 'details' | 'health' | 'coupling' | 'knowledge' | 'calls'>(() => {
     if (typeof window !== 'undefined') {
       const v = (window as any).__AUSPEX_VIEW__;
       if (v === 'health' || window.location.search.includes('view=health')) return 'health';
       if (v === 'details' || window.location.search.includes('view=details')) return 'details';
       if (v === 'coupling' || window.location.search.includes('view=coupling')) return 'coupling';
       if (v === 'knowledge' || window.location.search.includes('view=knowledge')) return 'knowledge';
+      if (v === 'calls' || window.location.search.includes('view=calls')) return 'calls';
     }
     return 'main';
   });
@@ -101,7 +103,7 @@ export const App: React.FC = () => {
       if (!msg) return;
 
       if (msg.type === 'init') {
-        if (msg.view === 'details' || msg.view === 'health' || msg.view === 'coupling' || msg.view === 'knowledge') {
+        if (msg.view === 'details' || msg.view === 'health' || msg.view === 'coupling' || msg.view === 'knowledge' || msg.view === 'calls') {
           setViewModeType(msg.view);
         }
         if (msg.language && (msg.language === 'de' || msg.language === 'en')) {
@@ -191,6 +193,14 @@ export const App: React.FC = () => {
       setSelectedNode(updated);
     }
   }, [displayTree]);
+
+  if (viewModeType === 'calls') {
+    return (
+      <div className="app-container" style={{ height: '100vh', width: '100%', overflow: 'auto', backgroundColor: 'var(--bg-secondary)' }}>
+        <CallsPanel language={language} vscode={vscode} />
+      </div>
+    );
+  }
 
   if (viewModeType === 'coupling') {
     return (

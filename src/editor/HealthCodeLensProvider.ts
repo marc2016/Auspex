@@ -2,6 +2,11 @@ import * as vscode from 'vscode';
 import path from 'path';
 import type { TreeNode } from '../analyzer/types';
 import { findFileNode } from '../utils/treeLookup';
+import type { CallCounts } from '../analyzer/calls/types';
+import { resolveLanguage, EXT_STRINGS } from '../i18n';
+
+/** Caller/callee counts of the known function at a file and line range, if any. */
+export type CallCountLookup = (relPath: string, startLine: number, endLine: number) => CallCounts | undefined;
 
 export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.Disposable {
   private _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
@@ -10,7 +15,10 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
   private _currentTree: TreeNode | null = null;
   private _fileNodes = new Map<string, TreeNode>();
 
-  constructor(workspacePath: string) {
+  constructor(
+    workspacePath: string,
+    private readonly _callCounts?: CallCountLookup
+  ) {
     this._workspacePath = workspacePath;
   }
 
@@ -91,6 +99,21 @@ export class HealthCodeLensProvider implements vscode.CodeLensProvider, vscode.D
           tooltip: 'Auspex Details öffnen',
         })
       );
+
+      if (m.type === 'method' && this._callCounts) {
+        const counts = this._callCounts(normPath, startLine, m.endLine ?? startLine);
+        if (counts) {
+          const t = EXT_STRINGS[resolveLanguage()];
+          lenses.push(
+            new vscode.CodeLens(range, {
+              title: t.callCountLens(counts.callers, counts.callees),
+              command: 'auspex.showCalls',
+              arguments: [normPath, startLine],
+              tooltip: t.viewTitles.calls,
+            })
+          );
+        }
+      }
     }
 
     return lenses;

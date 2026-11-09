@@ -356,5 +356,26 @@ describe('AstStructureAnalyzer', () => {
       expect(handlerMethod.startLine).toBe(10);
     });
   });
-});
 
+  describe('call extraction', () => {
+    it('stores call sites and AMD dependencies for JavaScript files', () => {
+      const code = [
+        "define(['app/Store'], function (Store) {",
+        '  function save() {',
+        '    Store.persist();',
+        '  }',
+        '});',
+      ].join('\n');
+      const parsed = analyzer.analyzeSource(code, 'src/cart.js');
+      expect(parsed.amdDependencies).toEqual({ Store: 'app/Store' });
+      expect(parsed.callSites).toEqual([
+        { callerName: 'save()', callerStartLine: 2, line: 3, callee: 'persist', receiverKind: 'amd', receiver: 'Store' },
+      ]);
+    });
+
+    it('does not extract call sites for other languages', () => {
+      const parsed = analyzer.analyzeSource('def run():\n    go()\n', 'src/app.py');
+      expect(parsed.callSites).toBeUndefined();
+    });
+  });
+});

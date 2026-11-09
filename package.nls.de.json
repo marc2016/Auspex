@@ -3,6 +3,7 @@
   "command.rescan": "Auspex: Workspace neu scannen",
   "command.openHelp": "Auspex: Hilfe & Dokumentation öffnen",
   "command.focusDetailsView": "Auspex: Details-Ansicht fokussieren",
+  "command.showCalls": "Auspex: Aufrufe anzeigen",
   "command.setJiraToken": "Auspex: Jira API-Token festlegen",
   "command.clearJiraToken": "Auspex: Jira API-Token löschen",
   "command.testJiraConnection": "Auspex: Jira-Verbindung testen",
@@ -14,5 +15,6 @@
   "views.healthView": "Auspex Health",
   "views.couplingView": "Auspex Kopplung",
   "views.knowledgeView": "Auspex Monopolwissen",
+  "views.callsView": "Auspex Aufrufe",
   "command.toggleEditorHealth": "Auspex: Code Health im Editor an/ausschalten"
 }

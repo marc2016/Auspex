@@ -16,13 +16,17 @@ import { resolveLanguage, EXT_STRINGS } from './i18n';
 import { openFileInEditor } from './utils/navigation';
 import { AuspexGitContentProvider, AUSPEX_GIT_SCHEME } from './utils/gitDiff';
 import { findFileNode } from './utils/treeLookup';
-import { filterSnapshotByScope } from './analyzer/scopeFilter';
-import type { AnalysisSnapshot, TreeNode, AuspexScope } from './analyzer/types';
+import { filterSnapshotByScope, filterCallGraphToTree } from './analyzer/scopeFilter';
+import type { AnalysisSnapshot, TreeNode, AuspexScope, ParsedFileInfo } from './analyzer/types';
 import { JiraConfigManager } from './integrations/jira/jiraConfigManager';
 import { JiraClient } from './integrations/jira/jiraClient';
 import { EditorHealthDecorator } from './editor/EditorHealthDecorator';
 import { HealthCodeLensProvider } from './editor/HealthCodeLensProvider';
 import { isRestorableSnapshot } from './analyzer/versioning';
+import { updateCallGraphForFile } from './analyzer/calls/incremental';
+import { CallGraphService, type LanguageServerMode } from './analyzer/calls/callGraphService';
+import { LspCallSource } from './integrations/callHierarchy/lspCallSource';
+import { AuspexCallsViewProvider } from './providers/CallsViewProvider';
 
 let pipeline: AuspexPipeline;
 let storage: AuspexStorage | null = null;
@@ -33,6 +37,7 @@ let detailsViewProvider: AuspexDetailsViewProvider;
 let healthViewProvider: AuspexHealthViewProvider;
 let couplingViewProvider: AuspexCouplingViewProvider;
 let knowledgeViewProvider: AuspexKnowledgeViewProvider;
+let callsViewProvider: AuspexCallsViewProvider;
 let statusBarItem: vscode.StatusBarItem;
 let rawSnapshot: AnalysisSnapshot | null = null;
 let currentScope: AuspexScope = { mode: 'all' };
@@ -43,6 +48,65 @@ let healthCodeLensProvider: HealthCodeLensProvider;
 let updateDetailsForEditor: (editor: vscode.TextEditor | undefined) => void;
 let setSelectedNodeAcrossProviders: (node: TreeNode | null, reveal?: boolean) => void;
 let applyCurrentScopeAndDistribute: (scope?: AuspexScope) => Promise<void>;
+/** Parsed files with call sites, loaded lazily for call graph updates on save; reset by each scan. */
+let callFileCache: Record<string, ParsedFileInfo> | null = null;
+/** Call graph of the current (scoped) snapshot merged with language server results. */
+const callGraphService = new CallGraphService();
+/** Called whenever the call graph of the current snapshots changed. */
+const onCallGraphChanged = (): void => callGraphService.setBaseGraph(latestSnapshot?.callGraph ?? undefined);
+let backgroundCallAnalysis: vscode.CancellationTokenSource | null = null;
+
+/** Method node of a file node starting at a line. */
+function findMethodNodeAt(node: TreeNode, startLine: number): TreeNode | null {
+  if (node.type === 'method' && node.startLine === startLine) return node;
+  for (const child of node.children ?? []) {
+    const found = findMethodNodeAt(child, startLine);
+    if (found) return found;
+  }
+  return null;
+}
+
+function languageServerMode(): LanguageServerMode {
+  const mode = vscode.workspace.getConfiguration('auspex').get<string>('calls.languageServer', 'onDemand');
+  return mode === 'background' || mode === 'off' ? mode : 'onDemand';
+}
+
+/** Queries outgoing calls of all functions via language servers (setting `background`). */
+async function startBackgroundCallAnalysis(workspacePath: string): Promise<void> {
+  if (languageServerMode() !== 'background') return;
+  const functions = callGraphService.graph?.functions;
+  if (!functions || functions.length === 0) return;
+
+  backgroundCallAnalysis?.cancel();
+  const cts = new vscode.CancellationTokenSource();
+  backgroundCallAnalysis = cts;
+
+  const fileCache = storage ? storage.loadFileCache() : {};
+  const fileHashes: Record<string, string> = {};
+  for (const [file, info] of Object.entries(fileCache)) fileHashes[file] = info.fileHash;
+  const lsp = new LspCallSource(workspacePath, functions);
+  const t = EXT_STRINGS[resolveLanguage()];
+
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: t.callAnalysisProgressTitle, cancellable: true },
+    async (progress, token) => {
+      token.onCancellationRequested(() => cts.cancel());
+      let lastDone = 0;
+      const cache = await callGraphService.crawl({
+        lsp,
+        fileHashes,
+        cache: storage ? storage.loadLspCallCache() : {},
+        isCancelled: () => cts.token.isCancellationRequested,
+        onProgress: (done, total) => {
+          progress.report({ message: `${done}/${total}`, increment: ((done - lastDone) / total) * 100 });
+          lastDone = done;
+        },
+      });
+      storage?.saveLspCallCache(cache);
+    }
+  );
+  if (backgroundCallAnalysis === cts) backgroundCallAnalysis = null;
+}
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log('[Auspex] Extension is activating…');
@@ -92,6 +156,7 @@ export async function activate(context: vscode.ExtensionContext) {
     try {
       const scoped = await filterSnapshotByScope(rawSnapshot, currentScope, workspacePath);
       latestSnapshot = scoped;
+      callGraphService.setBaseGraph(scoped.callGraph);
 
       overviewProvider.updateSnapshot(scoped, currentScope);
       sidebarProvider.updateSnapshot(scoped);
@@ -99,6 +164,7 @@ export async function activate(context: vscode.ExtensionContext) {
       healthViewProvider.updateSnapshot(scoped);
       couplingViewProvider.updateSnapshot(scoped);
       knowledgeViewProvider.updateSnapshot(scoped);
+      callsViewProvider.updateSnapshot(scoped);
       if (TreemapPanel.currentPanel) {
         TreemapPanel.currentPanel.sendSnapshot(scoped);
       }
@@ -198,12 +264,28 @@ export async function activate(context: vscode.ExtensionContext) {
     )
   );
 
+  callsViewProvider = new AuspexCallsViewProvider(context.extensionUri, workspacePath, {
+    service: callGraphService,
+    getMode: languageServerMode,
+    createLsp: (functions) => new LspCallSource(workspacePath, functions),
+    startScan: () => runScan(context, workspacePath, true),
+  });
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(AuspexCallsViewProvider.viewType, callsViewProvider)
+  );
+
   // Editor Gutter Health Decorator & CodeLens Provider
   editorHealthDecorator = new EditorHealthDecorator(context.extensionUri, workspacePath);
   context.subscriptions.push(editorHealthDecorator);
 
-  healthCodeLensProvider = new HealthCodeLensProvider(workspacePath);
+  healthCodeLensProvider = new HealthCodeLensProvider(workspacePath, (file, startLine, endLine) => {
+    const graph = callGraphService.graph;
+    const fn = graph?.functions.find((f) => f.file === file && f.startLine === startLine && f.endLine === endLine);
+    return fn && graph ? graph.counts[fn.id] ?? { callers: 0, callees: 0 } : undefined;
+  });
   context.subscriptions.push(healthCodeLensProvider);
+  const unsubscribeCallGraph = callGraphService.onDidChange(() => healthCodeLensProvider.refresh());
+  context.subscriptions.push({ dispose: unsubscribeCallGraph });
   context.subscriptions.push(
     vscode.languages.registerCodeLensProvider(
       { scheme: 'file' },
@@ -219,6 +301,16 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('auspex.openTreemap', () => {
       openTreemap(context, workspacePath);
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('auspex.showCalls', async (relPath: string, startLine: number) => {
+      const fileNode = latestSnapshot?.tree ? findFileNode(latestSnapshot.tree, relPath) : null;
+      const node = fileNode ? findMethodNodeAt(fileNode, startLine) : null;
+      if (!node) return;
+      setSelectedNodeAcrossProviders(node, false);
+      await vscode.commands.executeCommand('auspex.callsView.focus');
     })
   );
 
@@ -385,6 +477,7 @@ export async function activate(context: vscode.ExtensionContext) {
     healthViewProvider.setSelectedNode(node, reveal);
     couplingViewProvider.setSelectedNode(node, reveal);
     knowledgeViewProvider.setSelectedNode(node, reveal);
+    callsViewProvider.setSelectedNode(node, false);
   };
 
   updateDetailsForEditor = (editor: vscode.TextEditor | undefined) => {
@@ -407,15 +500,15 @@ export async function activate(context: vscode.ExtensionContext) {
   const astAnalyzer = new AstStructureAnalyzer();
   const treeAggregator = new TreeAggregator();
 
-  const syncDocumentHealth = (doc: vscode.TextDocument) => {
-    if (!doc || doc.uri.scheme !== 'file') return;
+  const syncDocumentHealth = (doc: vscode.TextDocument): ParsedFileInfo | undefined => {
+    if (!doc || doc.uri.scheme !== 'file') return undefined;
 
     const fsPath = doc.uri.fsPath;
     const relPath = path.relative(workspacePath, fsPath).replace(/\\/g, '/');
-    if (!relPath || relPath.startsWith('..') || path.isAbsolute(relPath)) return;
+    if (!relPath || relPath.startsWith('..') || path.isAbsolute(relPath)) return undefined;
 
     const ext = path.extname(relPath).toLowerCase();
-    if (!astAnalyzer.isSupportedExtension(ext)) return;
+    if (!astAnalyzer.isSupportedExtension(ext)) return undefined;
 
     const content = doc.getText();
     const parsed = astAnalyzer.analyzeSource(content, relPath);
@@ -450,6 +543,24 @@ export async function activate(context: vscode.ExtensionContext) {
         setSelectedNodeAcrossProviders(fileNode, false);
       }
     }
+    return parsed;
+  };
+
+  /** Re-resolves the call graph after a file was saved (no workspace scan). */
+  const refreshCallGraphAfterSave = (parsed: ParsedFileInfo) => {
+    if (!rawSnapshot?.callGraph || !findFileNode(rawSnapshot.tree, parsed.filePath)) return;
+    if (!callFileCache) callFileCache = storage ? storage.loadFileCache() : {};
+    const { fileCache, callGraph } = updateCallGraphForFile(callFileCache, parsed, pipeline.callGraphBuilder);
+    callFileCache = fileCache;
+    rawSnapshot.callGraph = callGraph;
+    callGraphService.invalidateFile(parsed.filePath);
+    if (latestSnapshot && latestSnapshot !== rawSnapshot) {
+      latestSnapshot.callGraph =
+        latestSnapshot.scope && latestSnapshot.scope.mode !== 'all'
+          ? filterCallGraphToTree(callGraph, latestSnapshot.tree)
+          : callGraph;
+    }
+    onCallGraphChanged();
   };
 
   let documentChangeTimer: NodeJS.Timeout | null = null;
@@ -491,7 +602,8 @@ export async function activate(context: vscode.ExtensionContext) {
         clearTimeout(documentChangeTimer);
         documentChangeTimer = null;
       }
-      syncDocumentHealth(doc);
+      const parsed = syncDocumentHealth(doc);
+      if (parsed) refreshCallGraphAfterSave(parsed);
     })
   );
 
@@ -606,7 +718,9 @@ async function runScan(
       );
 
       rawSnapshot = snapshot;
+      callFileCache = null;
       await applyCurrentScopeAndDistribute();
+      void startBackgroundCallAnalysis(workspacePath);
 
       if (interactive) {
         vscode.window.showInformationMessage(

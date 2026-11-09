@@ -1,3 +1,5 @@
+import type { CallSite, CallGraph } from './calls/types';
+
 export type NodeType = 'folder' | 'namespace' | 'file' | 'class' | 'method';
 
 export type BiomarkerType =
@@ -51,7 +53,7 @@ export interface ClassInfo {
  * Increment whenever extractor or analyzer changes alter results for unchanged files,
  * so cached file results and stored snapshots from older versions are re-analyzed.
  */
-export const ANALYZER_VERSION = 2;
+export const ANALYZER_VERSION = 3;
 
 export interface ParsedFileInfo {
   filePath: string;
@@ -65,6 +67,10 @@ export interface ParsedFileInfo {
   biomarkers?: BiomarkerFinding[];
   /** ANALYZER_VERSION that produced this result; missing for results written before versioning. */
   analyzerVersion?: number;
+  /** Calls found inside known functions (JS/TS only). */
+  callSites?: CallSite[];
+  /** AMD factory parameter -> dependency id, from `define([...], function (...) {})`. */
+  amdDependencies?: Record<string, string>;
 }
 
 export interface ContributorStat {
@@ -235,6 +241,8 @@ export interface AnalysisSnapshot {
   scopeSummary?: string;
   /** ANALYZER_VERSION that produced this snapshot; missing for snapshots written before versioning. */
   analyzerVersion?: number;
+  /** Call relationships between known functions. */
+  callGraph?: CallGraph;
 }
 
 export type ScopeMode = 'all' | 'worktree' | 'timeframe';

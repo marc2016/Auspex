@@ -52,6 +52,7 @@ CallEdge { from: FunctionId | { file, line }, to: FunctionId, confidence, source
 ### D5: Incremental update on save
 The existing save handler re-parses the file (now including call sites). It then re-runs global resolution only for edges whose caller is in that file plus edges targeting functions whose ids changed in that file, and invalidates that file's LSP cache entries.
 - *Alternative:* full resolution on each save - simple, likely fast enough for small repos; kept as fallback if the targeted update proves error-prone.
+- *Implemented:* the full re-resolution variant. The extension keeps the parsed files (with call sites) in memory, replaces the saved file and re-runs global resolution (`updateCallGraphForFile`); resolution is in-memory only, so no targeted update was needed.
 
 ### D6: Calls view
 `src/providers/CallsViewProvider.ts` following the `CouplingViewProvider` pattern (`viewType 'auspex.callsView'`, `__AUSPEX_VIEW__ = 'calls'`), registered in `package.json` under `auspex-sidebar` with `views.callsView` strings in `package.nls*.json` and `src/i18n.ts` / `webview/src/i18n.ts`. It receives the selected node via `setSelectedNodeAcrossProviders`. The webview component `CallsPanel.tsx` renders the two trees; expansion requests are answered by the provider from the call graph (+ LSP overlay). Recursion is detected by the path from the subject.

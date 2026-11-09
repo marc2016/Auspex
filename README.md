@@ -68,6 +68,13 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
   <img src="assets/screenshots/03-temporal-coupling.png" alt="Auspex Temporal Coupling Network Graph" width="100%" />
 </p>
 
+### 📞 Call Hierarchy (Calls View)
+- The **Calls** sidebar view shows who calls the selected function (incoming) and what it calls (outgoing) as expandable trees; recursive calls are marked and not expanded further.
+- Every entry shows its Code Health, churn color and LOC; clicking an entry opens it in the editor.
+- A CodeLens above each function shows the number of known callers and callees (e.g. `5 callers | 3 calls`) and opens the Calls view.
+- Calls are resolved by Auspex itself for JavaScript/TypeScript, including `this.x()` / `self.x()` calls inside constructors and calls across AMD `define()` modules. Calls matched only by name are marked as **inferred**.
+- Language servers (VS Code call hierarchy) add precise calls for the selected function on demand; with `auspex.calls.languageServer: "background"` the calls of all functions are collected after each scan (cancellable, cached per file).
+
 ### 🌐 System Architecture Map
 - High-level architectural overview grouping packages, folders, and modules as concentric circular clusters.
 - Color-coded health metrics to spot architectural decay and module complexity at a single glance.
@@ -141,6 +148,7 @@ Auspex contributes the following commands to the VS Code Command Palette:
 | `Auspex: Open Hotspot Treemap` | `auspex.openTreemap` | Opens the interactive full-screen Treemap tab. |
 | `Auspex: Rescan Workspace` | `auspex.rescan` | Triggers a fresh analysis of AST and Git history. |
 | `Auspex: Focus Details View` | `auspex.focusDetailsView` | Reveals the Auspex sidebar details panel. |
+| `Auspex: Show Calls` | `auspex.showCalls` | Shows a function in the Calls view (used by the call count CodeLens). |
 | `Auspex: Open Guide & Documentation` | `auspex.openHelp` | Opens the built-in Auspex user guide and documentation. |
 | `Auspex: Set Jira API Token` | `auspex.setJiraToken` | Safely saves your Jira API token in the OS Keychain. |
 | `Auspex: Clear Jira API Token` | `auspex.clearJiraToken` | Deletes the stored Jira API token. |
@@ -155,6 +163,7 @@ You can customize Auspex in VS Code Settings (`Cmd+,` / `Ctrl+,` → search for 
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `auspex.ignorePatterns` | `string[]` | `["node_modules", "dist", "build", ".git", "out", "bin", "obj"]` | Glob patterns to exclude from analysis. |
+| `auspex.calls.languageServer` | `string` | `"onDemand"` | Use of language servers for calls: `onDemand` (selected function in the Calls view), `background` (all functions after each scan) or `off` (Auspex resolution only). |
 | `auspex.jira.enabled` | `boolean` | `false` | Enable read-only Jira integration to enrich defect detection. |
 | `auspex.jira.host` | `string` | `""` | URL of your Jira instance (e.g. `https://company.atlassian.net`). |
 | `auspex.jira.email` | `string` | `""` | Account email for Jira Cloud authentication (leave blank for PAT). |

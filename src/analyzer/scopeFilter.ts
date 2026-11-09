@@ -18,6 +18,8 @@ import type {
   ParsedFileInfo,
 } from './types';
 import { isBugfixMessage } from './gitChurn';
+import { computeCounts } from './calls/callGraphBuilder';
+import type { CallGraph } from './calls/types';
 import { TemporalCouplingAnalyzer } from './temporalCoupling';
 import { KnowledgeAnalyzer } from './knowledgeAnalyzer';
 
@@ -278,6 +280,40 @@ function aggregateTreeMetrics(node: TreeNode): void {
  * - 'timeframe': returns snapshot with commits and metrics filtered to the given range
  */
 export async function filterSnapshotByScope(
+  baseSnapshot: AnalysisSnapshot,
+  scope: AuspexScope,
+  workspacePath: string
+): Promise<AnalysisSnapshot> {
+  const scoped = await filterSnapshotTreeByScope(baseSnapshot, scope, workspacePath);
+  if (!scoped.callGraph || scope.mode === 'all') return scoped;
+  return { ...scoped, callGraph: filterCallGraphToTree(scoped.callGraph, scoped.tree) };
+}
+
+/**
+ * Restricts a call graph to the files present in a (scoped) tree: edges whose callee is out of scope
+ * are dropped; callers of the remaining edges are kept so that they can still be shown.
+ */
+export function filterCallGraphToTree(graph: CallGraph, tree: TreeNode): CallGraph {
+  const files = new Set<string>();
+  const collect = (n: TreeNode) => {
+    if (n.type === 'file') files.add(n.path.replace(/\\/g, '/').replace(/^\/+/, ''));
+    n.children?.forEach(collect);
+  };
+  collect(tree);
+
+  const inScope = new Set(graph.functions.filter((f) => files.has(f.file)).map((f) => f.id));
+  const edges = graph.edges.filter((e) => inScope.has(e.to));
+  const referenced = new Set<string>(inScope);
+  for (const e of edges) if (typeof e.from === 'string') referenced.add(e.from);
+
+  return {
+    functions: graph.functions.filter((f) => referenced.has(f.id)),
+    edges,
+    counts: computeCounts(edges),
+  };
+}
+
+async function filterSnapshotTreeByScope(
   baseSnapshot: AnalysisSnapshot,
   scope: AuspexScope,
   workspacePath: string

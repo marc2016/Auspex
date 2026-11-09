@@ -12,6 +12,7 @@ import type {
 } from './types';
 import { ANALYZER_VERSION } from './types';
 import { isReusableFileResult } from './versioning';
+import { CallGraphBuilder } from './calls/callGraphBuilder';
 import type { AuspexStorage } from '../storage/cache';
 import { extractJiraKeys } from '../integrations/jira/ticketExtractor';
 import type { JiraClient } from '../integrations/jira/jiraClient';
@@ -20,6 +21,8 @@ export class AuspexPipeline {
   private churnAnalyzer = new GitChurnAnalyzer();
   private astAnalyzer = new AstStructureAnalyzer();
   private treeAggregator = new TreeAggregator();
+  /** Builds call graphs; further edge sources can be registered on it. */
+  readonly callGraphBuilder = new CallGraphBuilder();
 
   async run(
     workspacePath: string,
@@ -203,6 +206,8 @@ export class AuspexPipeline {
         this.churnAnalyzer.lastProjectCouplings
       );
 
+    const callGraph = this.callGraphBuilder.build(parsedFiles);
+
     if (knowledgeSummary) {
       knowledgeSummary.detectedAuthors = this.churnAnalyzer.lastDetectedAuthors;
     }
@@ -225,6 +230,7 @@ export class AuspexPipeline {
       knowledgeSummary,
       authorAliases: options?.authorAliases,
       analyzerVersion: ANALYZER_VERSION,
+      callGraph,
     };
 
     if (storage) {

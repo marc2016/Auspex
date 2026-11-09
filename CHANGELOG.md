@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Aliases of `this` (`var self = this; self.remove = function`) are supported, also inside anonymous callbacks.
   - Constructor methods appear directly under the constructor in the treemap with their own LOC, Code Health, gutter decorations and CodeLens; the constructor body is shown as `Name()`.
   - Private helpers (function declarations inside the constructor) stay nested; `this` inside anonymous callbacks is not attributed to the enclosing function.
+- **Call Hierarchy**:
+  - New **Calls** sidebar view with incoming and outgoing call trees for the selected function, annotated with Code Health, churn and LOC; recursive calls are marked.
+  - Call count CodeLens above functions (`N callers | M calls`) opening the Calls view (`auspex.showCalls`).
+  - Auspex call resolution for JavaScript/TypeScript (same-file calls, `this`/`self` calls, AMD `define()` dependencies, name-based matches marked as *inferred*), computed during the scan and updated on save.
+  - Language server integration via the VS Code call hierarchy: on demand for the selected function, or for all functions in the background (`auspex.calls.languageServer`), cached per file.
 
 ### Changed
 - **Treemap structure for constructor functions**: methods assigned to `this` were previously shown as nested helpers of the constructor body (`Cart > add()` under `Cart()`); they are now shown as `add()` directly under the `Cart` container. Code Health scores of affected files may change.

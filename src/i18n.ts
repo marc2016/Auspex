@@ -28,6 +28,8 @@ export const EXT_STRINGS = {
       `Auspex: ${files} Dateien (${loc.toLocaleString('de-DE')} LOC) in ${ms}ms analysiert.`,
     scanError: (msg: string) => `Auspex: Analyse fehlgeschlagen: ${msg}`,
     scanNotificationTitle: 'Auspex: Workspace wird analysiert',
+    callAnalysisProgressTitle: 'Auspex: Aufrufe über Language Server ermitteln',
+    callCountLens: (callers: number, callees: number) => `${callers} Aufrufer | ${callees} Aufrufe`,
     statusBarTooltip: (files: number) => `Auspex: ${files} Dateien analysiert. Klicken, um Treemap zu öffnen.`,
     statusBarDefault: 'Klicken, um Auspex Treemap zu öffnen',
     fileOpenError: (path: string) => `[Auspex] Datei konnte nicht geöffnet werden: ${path}`,
@@ -76,6 +78,7 @@ export const EXT_STRINGS = {
       health: 'Auspex Health',
       coupling: 'Auspex Kopplung',
       knowledge: 'Auspex Monopolwissen',
+      calls: 'Auspex Aufrufe',
     },
     authorAliasesSaved: (count: number) =>
       `Auspex: ${count} Autoren-Aliase erfolgreich gespeichert. Analyse wird aktualisiert…`,
@@ -100,6 +103,9 @@ export const EXT_STRINGS = {
       `Auspex: Scanned ${files} files (${loc.toLocaleString('en-US')} LOC) in ${ms}ms.`,
     scanError: (msg: string) => `Auspex: Scan failed: ${msg}`,
     scanNotificationTitle: 'Auspex: Analyzing Workspace',
+    callAnalysisProgressTitle: 'Auspex: Finding calls via language servers',
+    callCountLens: (callers: number, callees: number) =>
+      `${callers} ${callers === 1 ? 'caller' : 'callers'} | ${callees} ${callees === 1 ? 'call' : 'calls'}`,
     statusBarTooltip: (files: number) => `Auspex: ${files} files analyzed. Click to open Treemap.`,
     statusBarDefault: 'Click to open Auspex Treemap',
     fileOpenError: (path: string) => `[Auspex] Could not open file: ${path}`,
@@ -147,6 +153,7 @@ export const EXT_STRINGS = {
       health: 'Auspex Health',
       coupling: 'Auspex Coupling',
       knowledge: 'Auspex Knowledge Monopolies',
+      calls: 'Auspex Calls',
     },
     authorAliasesSaved: (count: number) =>
       `Auspex: Successfully saved ${count} author aliases. Refreshing analysis…`,

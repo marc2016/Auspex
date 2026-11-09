@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AnalysisSnapshot, TreeNode } from '../src/analyzer/types';
-import {
+import { filterCallGraphToTree,
   getTimeframeBounds,
   filterSnapshotByScope,
 } from '../src/analyzer/scopeFilter';
@@ -239,6 +239,33 @@ describe('scopeFilter', () => {
       expect(srcFolder?.children?.[0].linesDeleted).toBe(3);
       expect(result.hotspots.length).toBe(1);
       expect(result.hotspots[0].name).toBe('fileA.ts');
+    });
+  });
+
+  describe('filterCallGraphToTree', () => {
+    const node = (name: string, p: string, type: any, children: any[] = []): any => ({
+      name, path: p, type, value: 1, loc: 1, commitCount: 0, churnScore: 0, fixCount: 0, featCount: 0,
+      refactorCount: 0, linesAdded: 0, linesDeleted: 0, children,
+    });
+    const graph = {
+      functions: [
+        { id: 'a.js#a', file: 'a.js', qualifiedName: 'a', startLine: 1, endLine: 2 },
+        { id: 'b.js#b', file: 'b.js', qualifiedName: 'b', startLine: 1, endLine: 2 },
+        { id: 'c.js#c', file: 'c.js', qualifiedName: 'c', startLine: 1, endLine: 2 },
+      ],
+      edges: [
+        { from: 'a.js#a', to: 'b.js#b', confidence: 'certain' as const, source: 'js' as const },
+        { from: 'b.js#b', to: 'c.js#c', confidence: 'certain' as const, source: 'js' as const },
+      ],
+      counts: {},
+    };
+
+    it('drops edges whose callee is out of scope and keeps callers of in-scope callees', () => {
+      const tree = node('root', '/', 'folder', [node('b.js', 'b.js', 'file')]);
+      const scoped = filterCallGraphToTree(graph, tree);
+      expect(scoped.edges).toEqual([graph.edges[0]]);
+      expect(scoped.functions.map((f) => f.id).sort()).toEqual(['a.js#a', 'b.js#b']);
+      expect(scoped.counts['b.js#b']).toEqual({ callers: 1, callees: 0 });
     });
   });
 });
