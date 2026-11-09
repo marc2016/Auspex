@@ -6,20 +6,14 @@ Auspex shows where code is large, unhealthy or frequently changed, but not how i
 
 ## What Changes
 
-Delivered in two stages:
-
-**Stage 1 - per-function call tree**
+**Per-function call tree**
 - New sidebar view "Calls" (next to Coupling/Knowledge) showing incoming callers and outgoing callees of the selected function as an expandable tree.
 - Each node shows Auspex metrics: Code Health badge, churn/hotspot color, LOC.
 - Entry points: selecting a method in the treemap, and a new CodeLens above functions (e.g. "5 callers / 3 calls").
 
-**Stage 2 - repository call graph**
-- New chart type `callGraph` in the main panel, alongside treemap, system map and coupling graph, reusing the existing ECharts graph infrastructure.
-- Default: ego graph around the selected function with adjustable depth.
-- Toggle: module level (file -> file edges aggregated from function calls) as an overview.
-- Node size = LOC, node color = hotspot/health; uncertain edges are drawn differently (e.g. dashed).
+The repository-wide call diagram is a separate change (`add-call-diagram-editor`) that consumes the call data defined here.
 
-**Call data (shared by both stages)**
+**Call data (shared with `add-call-diagram-editor`)**
 - Hybrid resolution: VS Code's Call Hierarchy API (language servers) for ES modules, CommonJS and other languages; an Auspex resolver for JavaScript AMD modules (`define([...], function (...) {})` parameter-to-module mapping), `this.x()` and `self.x()` calls.
 - Edges come from pluggable **edge sources** (initially: language server, Auspex JS resolver). New sources can be added without changing the core call model or the views.
 - Every edge carries a confidence (`certain` / `inferred`) and its source kind (e.g. `js`, `declarative`).
@@ -35,7 +29,6 @@ Delivered in two stages:
 ### New Capabilities
 - `call-analysis`: extracting call edges between known functions, edge confidence, caching and incremental updates.
 - `call-hierarchy-view`: the "Calls" sidebar view with incoming/outgoing trees, metric annotations and entry points (treemap, CodeLens).
-- `call-graph-view`: the repository call graph chart (ego graph, module level, visual encoding).
 
 ### Modified Capabilities
 <!-- none: no specs exist yet -->
@@ -43,9 +36,9 @@ Delivered in two stages:
 ## Impact
 
 - Depends on `detect-this-assigned-methods` so that `this`-assigned methods exist as graph nodes.
-- `detect-declarative-references` builds on the edge-source model defined here and can be implemented after Stage 1.
+- `detect-declarative-references` builds on the edge-source model defined here and can be implemented once this change is done.
 - New analyzer module (pipeline step) under `src/analyzer/`, new resolver for AMD/`this` calls, extension of `src/storage/cache.ts`.
 - New provider `src/providers/CallsViewProvider.ts`, view contribution and commands in `package.json` (+ `package.nls*.json`), CodeLens extension in `src/editor/HealthCodeLensProvider.ts`.
-- Webview: new call tree component, new `callGraph` chart type based on `CouplingGraphViewer`.
+- Webview: new call tree component.
 - Performance: language server queries over the whole repo can take minutes on first run; must not block the existing scan.
 - Requires language extensions to be active for LSP-based resolution; falls back to Auspex's resolver or reports "no call data" otherwise.
