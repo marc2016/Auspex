@@ -33,6 +33,7 @@ export class CodeHealthAnalyzer {
       const isProto = cls.kind === 'prototype';
       const isComponent = cls.kind === 'component';
       const isModule = cls.kind === 'module';
+      const isConstructor = cls.kind === 'constructor';
 
       const isGodSmell = isComponent
         ? (cls.loc >= 400 || cls.methods.length >= 12)
@@ -49,6 +50,8 @@ export class CodeHealthAnalyzer {
           ? 'Prototype'
           : isModule
           ? 'Module'
+          : isConstructor
+          ? 'Constructor'
           : 'Class';
         const smellLabel = isComponent ? 'God Component' : isObject ? 'God Object' : 'God Class';
         const finding: BiomarkerFinding = {

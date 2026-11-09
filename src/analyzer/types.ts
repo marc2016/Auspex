@@ -41,10 +41,17 @@ export interface ClassInfo {
   endLine: number;
   loc: number;
   methods: MethodInfo[];
-  kind?: 'class' | 'object_literal' | 'prototype' | 'module' | 'component';
+  kind?: 'class' | 'object_literal' | 'prototype' | 'module' | 'component' | 'constructor';
   codeHealth?: number;
   biomarkers?: BiomarkerFinding[];
 }
+
+/**
+ * Version of the analysis output for unchanged source files.
+ * Increment whenever extractor or analyzer changes alter results for unchanged files,
+ * so cached file results and stored snapshots from older versions are re-analyzed.
+ */
+export const ANALYZER_VERSION = 2;
 
 export interface ParsedFileInfo {
   filePath: string;
@@ -56,6 +63,8 @@ export interface ParsedFileInfo {
   lastModifiedAt?: number;
   codeHealth?: number;
   biomarkers?: BiomarkerFinding[];
+  /** ANALYZER_VERSION that produced this result; missing for results written before versioning. */
+  analyzerVersion?: number;
 }
 
 export interface ContributorStat {
@@ -224,6 +233,8 @@ export interface AnalysisSnapshot {
   authorAliases?: Record<string, string[]>;
   scope?: AuspexScope;
   scopeSummary?: string;
+  /** ANALYZER_VERSION that produced this snapshot; missing for snapshots written before versioning. */
+  analyzerVersion?: number;
 }
 
 export type ScopeMode = 'all' | 'worktree' | 'timeframe';

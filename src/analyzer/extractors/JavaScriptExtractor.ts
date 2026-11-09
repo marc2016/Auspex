@@ -8,12 +8,39 @@ import {
 
 interface EnclosingScope {
   name: string;
-  kind: 'class' | 'object_literal' | 'prototype' | 'module' | 'component' | 'function';
+  /**
+   * 'anonymous' marks an anonymous function expression (e.g. a callback). It is never emitted,
+   * but it rebinds `this`, so this-assignments directly inside it do not create methods.
+   */
+  kind: 'class' | 'object_literal' | 'prototype' | 'module' | 'component' | 'function' | 'anonymous';
   startLine: number;
   endLine: number;
   classRef?: ClassInfo;
   methodRef?: MethodInfo;
+  /** Plain function name (without "parent > " prefix) for function/component scopes. */
+  baseName?: string;
+  /** Local variables bound to `this` in this function (e.g. `var self = this`). */
+  thisAliases?: Set<string>;
+  /** True for methods of a class, prototype or object literal container. */
+  isContainerMethod?: boolean;
+  /** True for methods created from `this.x = function` assignments. */
+  isThisMethod?: boolean;
 }
+
+const THIS_BINDING_KINDS = new Set<EnclosingScope['kind']>(['function', 'component', 'anonymous']);
+
+/** `recv.prop = <function value>` on a single line (function expression, async function or arrow). */
+const MEMBER_FUNCTION_ASSIGNMENT =
+  /^\s*([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s+)?(?:function\b|(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>)/;
+
+/** `recv.prop = (` / `recv.prop = async (` whose arrow parameter list continues on following lines. */
+const MEMBER_ARROW_ASSIGNMENT_START = /^\s*([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*$/;
+
+/** `var|let|const name = this` */
+const THIS_ALIAS_DECLARATION = /^\s*(?:var|let|const)\s+([A-Za-z_$][\w$]*)\s*=\s*this\s*[;,]?\s*$/;
+
+/** Anonymous function expression start, e.g. `forEach(function (x) {` or `define([...], function (A) {`. */
+const ANONYMOUS_FUNCTION = /(^|[^\w$.])function\s*\(/;
 
 export class JavaScriptExtractor implements LanguageStructureExtractor {
   readonly supportedLanguages = ['javascript', 'typescript'];
@@ -148,6 +175,99 @@ export class JavaScriptExtractor implements LanguageStructureExtractor {
     const isPascalCase = (name: string) =>
       /^[A-Z][a-zA-Z0-9_$]*$/.test(name) && !/^[A-Z0-9_]+$/.test(name);
 
+    /** Nearest scope whose `this` applies at the current position (arrows are transparent). */
+    const findThisBindingScope = (): EnclosingScope | undefined => {
+      for (let s = scopeStack.length - 1; s >= 0; s--) {
+        if (THIS_BINDING_KINDS.has(scopeStack[s].kind)) return scopeStack[s];
+      }
+      return undefined;
+    };
+
+    /** Scope that owns the `this` referenced by `receiver` (`this` itself or a declared alias). */
+    const findReceiverScope = (receiver: string): EnclosingScope | undefined => {
+      if (receiver === 'this') return findThisBindingScope();
+      for (let s = scopeStack.length - 1; s >= 0; s--) {
+        if (scopeStack[s].thisAliases?.has(receiver)) return scopeStack[s];
+      }
+      return undefined;
+    };
+
+    /**
+     * Turns a plain named function scope into a constructor container (or returns the existing one).
+     * Returns undefined if the scope cannot be a constructor (anonymous, container method, this-method).
+     */
+    const promoteToConstructor = (scope: EnclosingScope): ClassInfo | undefined => {
+      if (scope.kind === 'anonymous' || scope.isContainerMethod || scope.isThisMethod || !scope.baseName) {
+        return undefined;
+      }
+      if (scope.classRef?.kind === 'constructor') {
+        return scope.classRef;
+      }
+
+      const scopeIdx = scopeStack.indexOf(scope);
+
+      // Enclosing "components" around a constructor are module wrappers (IIFE / factory), not components.
+      for (let s = 0; s < scopeIdx; s++) {
+        const outer = scopeStack[s];
+        if (outer.kind === 'component' && outer.classRef?.kind === 'component') {
+          const idx = classes.indexOf(outer.classRef);
+          if (idx >= 0) classes.splice(idx, 1);
+          outer.classRef = undefined;
+        }
+      }
+
+      let cls: ClassInfo;
+      if (scope.classRef && scope.classRef.kind === 'component') {
+        cls = scope.classRef;
+        cls.kind = 'constructor';
+      } else {
+        cls = {
+          name: scope.baseName,
+          startLine: scope.startLine,
+          endLine: scope.endLine,
+          loc: Math.max(scope.endLine - scope.startLine + 1, 1),
+          methods: [],
+          kind: 'constructor',
+        };
+        classes.push(cls);
+        scope.classRef = cls;
+      }
+
+      // A promoted nested function's body becomes the constructor body method `Name()`.
+      if (scope.methodRef && scope.methodRef.isNested) {
+        scope.methodRef.name = `${scope.baseName}()`;
+        delete scope.methodRef.parentMethod;
+        scope.methodRef.isNested = false;
+        scope.name = scope.baseName;
+      }
+      constructorBodies.set(cls, scope.methodRef);
+      return cls;
+    };
+
+    /** Returns `{ receiver, prop }` if the line assigns a function value to a member. */
+    const matchMemberFunctionAssignment = (i: number): { receiver: string; prop: string } | null => {
+      const line = lines[i];
+      const single = line.match(MEMBER_FUNCTION_ASSIGNMENT);
+      if (single) return { receiver: single[1], prop: single[2] };
+
+      // Arrow function whose parameter list spans several lines: `this.x = (\n a,\n b\n) => {`
+      const start = line.match(MEMBER_ARROW_ASSIGNMENT_START);
+      if (!start) return null;
+      let combined = line;
+      for (let k = 1; k <= 15 && i + k < lines.length; k++) {
+        const next = lines[i + k].trim();
+        if (isCommentOrEmpty(next)) continue;
+        combined += ' ' + next;
+        if (next.includes('=>')) {
+          return /\)\s*(?::\s*[^=]+)?=>/.test(combined) ? { receiver: start[1], prop: start[2] } : null;
+        }
+        if (next.includes(';') || next.includes('{')) return null;
+      }
+      return null;
+    };
+
+    const constructorBodies = new Map<ClassInfo, MethodInfo | undefined>();
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const trimmed = line.trim();
@@ -161,6 +281,47 @@ export class JavaScriptExtractor implements LanguageStructureExtractor {
       // Pop scopes that ended before current line
       while (scopeStack.length > 0 && scopeStack[scopeStack.length - 1].endLine < currentLine) {
         scopeStack.pop();
+      }
+
+      // 0a. `var self = this` - remember the alias on the scope that owns this `this`
+      const aliasMatch = line.match(THIS_ALIAS_DECLARATION);
+      if (aliasMatch) {
+        const owner = findThisBindingScope();
+        if (owner) {
+          owner.thisAliases = owner.thisAliases ?? new Set<string>();
+          owner.thisAliases.add(aliasMatch[1]);
+        }
+        continue;
+      }
+
+      // 0b. `this.x = function` / `self.x = () =>` - method of a constructor function
+      const memberAssign = matchMemberFunctionAssignment(i);
+      if (memberAssign) {
+        const ownerScope = findReceiverScope(memberAssign.receiver);
+        const ctor = ownerScope ? promoteToConstructor(ownerScope) : undefined;
+        if (ctor) {
+          const startLine = currentLine;
+          const endLine = findBraceBlockEnd(lines, i);
+          const methodObj: MethodInfo = {
+            name: `${memberAssign.prop}()`,
+            startLine,
+            endLine,
+            loc: Math.max(endLine - startLine + 1, 1),
+          };
+          methods.push(methodObj);
+          ctor.methods.push(methodObj);
+          scopeStack.push({
+            name: memberAssign.prop,
+            kind: 'function',
+            startLine,
+            endLine,
+            methodRef: methodObj,
+            baseName: memberAssign.prop,
+            isThisMethod: true,
+          });
+          continue;
+        }
+        // Otherwise fall through: handled like before (nested helper / property assignment).
       }
 
       // 1. Check ES6 Class
@@ -329,7 +490,25 @@ export class JavaScriptExtractor implements LanguageStructureExtractor {
         }
       }
 
-      if (!funcName) continue;
+      // Member assignment of an arrow function that is not a constructor method
+      // (e.g. inside an ES6 class constructor): treat it like other member assignments.
+      if (!funcName && memberAssign) {
+        funcName = memberAssign.prop;
+      }
+
+      if (!funcName) {
+        // Anonymous function expression (callback, AMD factory, IIFE): track it so that `this`
+        // inside it is not attributed to the enclosing function. Never emitted as a method.
+        const anon = ANONYMOUS_FUNCTION.exec(line);
+        if (anon) {
+          const startCol = anon.index + anon[1].length;
+          const endLine = findBraceBlockEnd(lines, i, 5000, startCol);
+          if (endLine > currentLine) {
+            scopeStack.push({ name: '<anonymous>', kind: 'anonymous', startLine: currentLine, endLine });
+          }
+        }
+        continue;
+      }
 
       const startLine = currentLine;
       const endLine = findBraceBlockEnd(lines, i);
@@ -392,6 +571,7 @@ export class JavaScriptExtractor implements LanguageStructureExtractor {
           startLine,
           endLine,
           methodRef: methodObj,
+          baseName: funcName,
         });
       } else {
         // Top-level function or direct method of a class/object
@@ -422,6 +602,7 @@ export class JavaScriptExtractor implements LanguageStructureExtractor {
             endLine,
             classRef: compClass,
             methodRef: methodObj,
+            baseName: funcName,
           });
         } else {
           const methodObj: MethodInfo = {
@@ -440,14 +621,25 @@ export class JavaScriptExtractor implements LanguageStructureExtractor {
             startLine,
             endLine,
             methodRef: methodObj,
+            baseName: funcName,
+            isContainerMethod: !!enclosingClass,
           });
         }
       }
     }
 
+    // A constructor's members are all functions inside its range except its own body method.
+    for (const [cls, body] of constructorBodies) {
+      cls.methods = methods.filter(
+        (m) => m !== body && m.startLine >= cls.startLine && m.endLine <= cls.endLine
+      );
+    }
+
     // Filter out trivial object literals and empty components
     const significantClasses = classes.filter((c) => {
-      if (c.kind === 'class' || c.kind === 'prototype' || c.kind === 'module') return true;
+      if (c.kind === 'class' || c.kind === 'prototype' || c.kind === 'module' || c.kind === 'constructor') {
+        return true;
+      }
       if (c.kind === 'component') return c.methods.length > 0 || c.loc >= 40;
       // Object literal: keep if it contains at least 1 method or has >= 40 LOC
       return c.methods.length > 0 || c.loc >= 40;

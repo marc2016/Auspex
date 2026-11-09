@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TreeAggregator } from '../src/analyzer/treeAggregator';
+import { JavaScriptExtractor } from '../src/analyzer/extractors/JavaScriptExtractor';
 import type { ParsedFileInfo, FileCommitStat } from '../src/analyzer/types';
 
 describe('TreeAggregator', () => {
@@ -389,5 +390,36 @@ describe('TreeAggregator', () => {
       expect(node.children?.[0].startLine).toBe(5);
     });
   });
-});
 
+  it('places constructor methods directly under the constructor container', () => {
+    const src = [
+      'function Cart() {',
+      '  var self = this;',
+      '  this.add = function (item) {',
+      '    return item;',
+      '  };',
+      '  self.remove = function (item) {',
+      '    return item;',
+      '  };',
+      '}',
+    ];
+    const extracted = new JavaScriptExtractor().extractStructures(src, 'javascript');
+    const file: ParsedFileInfo = {
+      filePath: 'src/cart.js',
+      classes: extracted.classes,
+      methods: extracted.methods,
+      loc: src.length,
+      fileHash: 'h',
+    };
+
+    const { tree } = aggregator.buildTree([file], new Map());
+    const srcFolder = tree.children?.find((c) => c.name === 'src');
+    const fileNode = srcFolder?.children?.find((c) => c.name === 'cart.js');
+    const cart = fileNode?.children?.find((c) => c.name === 'Cart');
+
+    expect(cart?.type).toBe('class');
+    expect(cart?.children?.map((c) => c.name)).toEqual(['Cart()', 'add()', 'remove()']);
+    const body = cart?.children?.find((c) => c.name === 'Cart()');
+    expect(body?.children ?? []).toHaveLength(0);
+  });
+});

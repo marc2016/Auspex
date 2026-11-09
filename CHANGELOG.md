@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Constructor Function Detection (JavaScript)**:
+  - Functions that assign methods to `this` (`this.add = function`, `this.total = () => {}`, `this.load = async function`) are recognized as **Constructor** containers, regardless of the capitalization of their name, including constructors inside AMD `define()` and IIFE modules.
+  - Aliases of `this` (`var self = this; self.remove = function`) are supported, also inside anonymous callbacks.
+  - Constructor methods appear directly under the constructor in the treemap with their own LOC, Code Health, gutter decorations and CodeLens; the constructor body is shown as `Name()`.
+  - Private helpers (function declarations inside the constructor) stay nested; `this` inside anonymous callbacks is not attributed to the enclosing function.
+
+### Changed
+- **Treemap structure for constructor functions**: methods assigned to `this` were previously shown as nested helpers of the constructor body (`Cart > add()` under `Cart()`); they are now shown as `add()` directly under the `Cart` container. Code Health scores of affected files may change.
+- **Versioned analysis cache**: cached file results and stored snapshots record the analyzer version. Results from an older version are re-analyzed automatically, so the first scan after updating re-parses all files.
+
 ---
 
 ## [1.4.0] - 2026-09-14

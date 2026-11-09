@@ -22,6 +22,7 @@ import { JiraConfigManager } from './integrations/jira/jiraConfigManager';
 import { JiraClient } from './integrations/jira/jiraClient';
 import { EditorHealthDecorator } from './editor/EditorHealthDecorator';
 import { HealthCodeLensProvider } from './editor/HealthCodeLensProvider';
+import { isRestorableSnapshot } from './analyzer/versioning';
 
 let pipeline: AuspexPipeline;
 let storage: AuspexStorage | null = null;
@@ -61,13 +62,13 @@ export async function activate(context: vscode.ExtensionContext) {
   pipeline = new AuspexPipeline();
   jiraConfigManager = new JiraConfigManager(context.secrets);
 
-  // Restore cached snapshot if available (must have valid codeHealth)
+  // Restore cached snapshot if available (must have valid codeHealth and the current analyzer version)
   const cachedSnapshot = storage.loadSnapshot();
-  if (cachedSnapshot && typeof cachedSnapshot.tree?.codeHealth === 'number') {
+  if (isRestorableSnapshot(cachedSnapshot)) {
     rawSnapshot = cachedSnapshot;
     latestSnapshot = cachedSnapshot;
   } else {
-    console.log('[Auspex] Cached snapshot lacks Code Health data. Invalidation triggered for fresh scan.');
+    console.log('[Auspex] Cached snapshot is missing, incomplete or from an older analyzer version. A fresh scan is required.');
     rawSnapshot = null;
     latestSnapshot = null;
   }

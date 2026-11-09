@@ -40,6 +40,9 @@ vi.mock('vscode', () => {
 
 import * as vscode from 'vscode';
 import { HealthCodeLensProvider } from '../src/editor/HealthCodeLensProvider';
+import { JavaScriptExtractor } from '../src/analyzer/extractors/JavaScriptExtractor';
+import { CodeHealthAnalyzer } from '../src/analyzer/codeHealth';
+import { TreeAggregator } from '../src/analyzer/treeAggregator';
 
 describe('HealthCodeLensProvider', () => {
   let provider: HealthCodeLensProvider;
@@ -279,5 +282,43 @@ describe('HealthCodeLensProvider', () => {
     lenses = provider.provideCodeLenses(doc, {} as any);
     expect(lenses).toHaveLength(1);
     expect(lenses[0].range.start.line).toBe(11);
+  });
+
+  it('shows a CodeLens on the line where a constructor method is assigned to this', () => {
+    const lines = [
+      'function Cart() {',
+      '  this.items = [];',
+      '  this.add = function (item) {',
+      '    this.items.push(item);',
+      '  };',
+      '}',
+    ];
+    const { classes, methods } = new JavaScriptExtractor().extractStructures(lines, 'javascript');
+    const health = new CodeHealthAnalyzer().analyzeFile(lines, methods, classes, 'javascript');
+    const { tree } = new TreeAggregator().buildTree(
+      [
+        {
+          filePath: 'src/cart.js',
+          classes,
+          methods,
+          loc: lines.length,
+          fileHash: 'h',
+          codeHealth: health.score,
+          biomarkers: health.biomarkers,
+        },
+      ],
+      new Map()
+    );
+    provider.updateTree(tree);
+
+    const doc = {
+      uri: { scheme: 'file', fsPath: '/workspace/src/cart.js' },
+      lineCount: lines.length,
+    } as any;
+    const lenses = provider.provideCodeLenses(doc, {} as any);
+    const lensLines = lenses.map((l: any) => l.range.start.line);
+
+    // 0-based line 2 is "this.add = function"
+    expect(lensLines).toContain(2);
   });
 });

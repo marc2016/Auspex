@@ -284,4 +284,311 @@ describe('Rhino 1.7 JavaScript & Extractor Analysis', () => {
       expect(result.methods).toHaveLength(0);
     });
   });
+
+  describe('Constructor functions and this-assigned methods', () => {
+    const extract = (src: string) => extractor.extractStructures(src.split('\n'), 'javascript');
+    const names = (r: { methods: { name: string }[] }) => r.methods.map((m) => m.name);
+
+    describe('anonymous function scopes', () => {
+      it('keeps names of nested functions declared inside anonymous callbacks', () => {
+        const r = extract(
+          [
+            'function outer(items) {',
+            '  items.forEach(function (x) {',
+            '    function inner(y) {',
+            '      return y;',
+            '    }',
+            '    inner(x);',
+            '  });',
+            '}',
+          ].join('\n')
+        );
+        expect(names(r)).toEqual(['outer()', 'outer > inner()']);
+        expect(r.methods[1].parentMethod).toBe('outer');
+        expect(r.classes).toHaveLength(0);
+      });
+    });
+
+    describe('aliases of this', () => {
+      it('treats var self = this as this', () => {
+        const r = extract(
+          [
+            'function Cart() {',
+            '  var self = this;',
+            '  self.remove = function (item) {',
+            '    return item;',
+            '  };',
+            '}',
+          ].join('\n')
+        );
+        expect(r.classes).toHaveLength(1);
+        expect(r.classes[0].kind).toBe('constructor');
+        expect(r.classes[0].methods.map((m) => m.name)).toEqual(['remove()']);
+      });
+
+      it('accepts aliases with other names', () => {
+        const r = extract(
+          [
+            'function Cart() {',
+            '  const that = this;',
+            '  that.reset = () => {',
+            '    return 0;',
+            '  };',
+            '}',
+          ].join('\n')
+        );
+        expect(r.classes[0].methods.map((m) => m.name)).toEqual(['reset()']);
+      });
+
+      it('resolves an alias used inside an anonymous callback to the declaring constructor', () => {
+        const r = extract(
+          [
+            'function Cart(items) {',
+            '  var self = this;',
+            '  items.forEach(function (i) {',
+            '    self.add = function () {',
+            '      return i;',
+            '    };',
+            '  });',
+            '}',
+          ].join('\n')
+        );
+        expect(r.classes[0].name).toBe('Cart');
+        expect(r.classes[0].methods.map((m) => m.name)).toEqual(['add()']);
+      });
+
+      it('does not treat assignments on unrelated objects as methods', () => {
+        const r = extract(
+          [
+            'function Cart(options) {',
+            '  options.callback = function () {',
+            '    return 1;',
+            '  };',
+            '}',
+          ].join('\n')
+        );
+        expect(r.classes.every((c) => c.kind !== 'constructor')).toBe(true);
+        expect(names(r)).toContain('Cart > callback()');
+      });
+    });
+
+    describe('function values assigned to this', () => {
+      const r = extract(
+        [
+          'function Cart(items) {',
+          '  this.items = items;',
+          '  this.handler = onClick;',
+          '  this.add = function (item) {',
+          '    this.items.push(item);',
+          '  };',
+          '  this.total = () => {',
+          '    return 0;',
+          '  };',
+          '  this.load = async function () {',
+          '    return 1;',
+          '  };',
+          '  this.double = (x) => x * 2;',
+          '  this.reset = (',
+          '    a,',
+          '    b',
+          '  ) => {',
+          '    return a + b;',
+          '  };',
+          '}',
+        ].join('\n')
+      );
+      const byName = (n: string) => r.methods.find((m) => m.name === n);
+
+      it('detects function expressions with their own line range', () => {
+        expect(byName('add()')).toMatchObject({ startLine: 4, endLine: 6 });
+      });
+
+      it('detects arrow functions with block and expression bodies', () => {
+        expect(byName('total()')).toMatchObject({ startLine: 7, endLine: 9 });
+        expect(byName('double()')).toMatchObject({ startLine: 13, endLine: 13 });
+      });
+
+      it('detects async function expressions', () => {
+        expect(byName('load()')).toMatchObject({ startLine: 10, endLine: 12 });
+      });
+
+      it('detects arrow functions with multi-line parameter lists', () => {
+        expect(byName('reset()')).toMatchObject({ startLine: 14, endLine: 19 });
+      });
+
+      it('ignores non-function values', () => {
+        expect(byName('items()')).toBeUndefined();
+        expect(byName('handler()')).toBeUndefined();
+      });
+
+      it('reports the methods without parent and keeps the constructor body', () => {
+        expect(byName('add()')?.parentMethod).toBeUndefined();
+        expect(byName('add()')?.isNested).toBeFalsy();
+        expect(byName('Cart()')).toMatchObject({ startLine: 1, endLine: 20 });
+        expect(r.classes[0].methods.map((m) => m.name)).toEqual([
+          'add()',
+          'total()',
+          'load()',
+          'double()',
+          'reset()',
+        ]);
+      });
+    });
+
+    describe('constructor containers', () => {
+      it('classifies a PascalCase constructor as constructor, not component', () => {
+        const r = extract(['function Cart() {', '  this.add = function () {', '    return 1;', '  };', '}'].join('\n'));
+        expect(r.classes).toHaveLength(1);
+        expect(r.classes[0]).toMatchObject({ name: 'Cart', kind: 'constructor', startLine: 1, endLine: 5 });
+      });
+
+      it('creates a container for a lower-case constructor', () => {
+        const r = extract(['function cart() {', '  this.add = function () {', '    return 1;', '  };', '}'].join('\n'));
+        expect(r.classes).toHaveLength(1);
+        expect(r.classes[0]).toMatchObject({ name: 'cart', kind: 'constructor' });
+        expect(r.classes[0].methods.map((m) => m.name)).toEqual(['add()']);
+      });
+
+      it('keeps functions without this-assigned methods unchanged', () => {
+        const r = extract(['function Header(props) {', '  return render(props);', '}'].join('\n'));
+        expect(names(r)).toEqual(['Header()']);
+        expect(r.classes.every((c) => c.kind !== 'constructor')).toBe(true);
+      });
+
+      it('detects a constructor inside an AMD module', () => {
+        const r = extract(
+          [
+            "define(['app/Store'], function (Store) {",
+            '  function Cart() {',
+            '    this.add = function () {',
+            '      Store.persist();',
+            '    };',
+            '  }',
+            '  return Cart;',
+            '});',
+          ].join('\n')
+        );
+        expect(r.classes).toHaveLength(1);
+        expect(r.classes[0]).toMatchObject({ name: 'Cart', kind: 'constructor', startLine: 2, endLine: 6 });
+        expect(r.classes[0].methods.map((m) => m.name)).toEqual(['add()']);
+      });
+
+      it('detects a constructor nested in an IIFE module and drops the wrapper component', () => {
+        const r = extract(
+          [
+            'var Cart = (function () {',
+            '  function Cart() {',
+            '    this.add = function () {',
+            '      return 1;',
+            '    };',
+            '  }',
+            '  return Cart;',
+            '})();',
+          ].join('\n')
+        );
+        expect(r.classes).toHaveLength(1);
+        expect(r.classes[0]).toMatchObject({ name: 'Cart', kind: 'constructor', startLine: 2, endLine: 6 });
+        expect(r.classes[0].methods.map((m) => m.name)).toEqual(['add()']);
+        const body = r.methods.find((m) => m.startLine === 2);
+        expect(body).toMatchObject({ name: 'Cart()', isNested: false });
+        expect(body?.parentMethod).toBeUndefined();
+      });
+    });
+
+    describe('binding of this', () => {
+      it('ignores this-assignments inside anonymous callbacks', () => {
+        const r = extract(
+          [
+            'function init(items) {',
+            '  items.forEach(function (el) {',
+            '    this.onclick = function () {',
+            '      return 1;',
+            '    };',
+            '  });',
+            '}',
+          ].join('\n')
+        );
+        expect(r.classes).toHaveLength(0);
+        expect(names(r)).toEqual(['init()', 'init > onclick()']);
+      });
+
+      it('treats arrow callbacks as transparent', () => {
+        const r = extract(
+          [
+            'function Cart(items) {',
+            '  items.forEach((i) => {',
+            '    this.add = function () {',
+            '      return i;',
+            '    };',
+            '  });',
+            '}',
+          ].join('\n')
+        );
+        expect(r.classes[0]).toMatchObject({ name: 'Cart', kind: 'constructor' });
+        expect(r.classes[0].methods.map((m) => m.name)).toEqual(['add()']);
+      });
+    });
+
+    describe('closures and container methods', () => {
+      it('keeps private helpers nested and nests closures under constructor methods', () => {
+        const r = extract(
+          [
+            'function Cart() {',
+            '  function validate(item) {',
+            '    return !!item;',
+            '  }',
+            '  this.add = function (x) {',
+            '    validate(x);',
+            '  };',
+            '  this.load = function () {',
+            '    function parse(r) {',
+            '      return r;',
+            '    }',
+            '    return parse(1);',
+            '  };',
+            '}',
+          ].join('\n')
+        );
+        expect(r.methods.find((m) => m.name === 'Cart > validate()')).toMatchObject({
+          parentMethod: 'Cart',
+          isNested: true,
+        });
+        expect(r.methods.find((m) => m.name === 'add()')?.parentMethod).toBeUndefined();
+        expect(r.methods.find((m) => m.name === 'load > parse()')).toMatchObject({
+          parentMethod: 'load',
+          isNested: true,
+        });
+      });
+
+      it('does not create a constructor for this-assignments inside a prototype method', () => {
+        const r = extract(
+          [
+            'Foo.prototype.init = function () {',
+            '  this.onClick = function () {',
+            '    return 1;',
+            '  };',
+            '};',
+          ].join('\n')
+        );
+        expect(r.classes.map((c) => c.kind)).toEqual(['prototype']);
+        expect(names(r)).toEqual(['init()', 'init > onClick()']);
+      });
+
+      it('reports arrow assignments in an ES6 class constructor as nested helpers', () => {
+        const r = extract(
+          [
+            'class Foo {',
+            '  constructor() {',
+            '    this.handle = () => {',
+            '      return 1;',
+            '    };',
+            '  }',
+            '}',
+          ].join('\n')
+        );
+        expect(r.classes.map((c) => c.kind)).toEqual(['class']);
+        expect(names(r)).toEqual(['constructor()', 'constructor > handle()']);
+      });
+    });
+  });
 });

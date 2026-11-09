@@ -23,8 +23,15 @@ export interface LanguageStructureExtractor {
 
 /**
  * Finds the 1-based end line of a curly-brace block starting at `startLineIdx` (0-based).
+ * `startCol` (0-based) skips the beginning of the first line, e.g. to start at an inline
+ * `function (...) {` expression passed as an argument.
  */
-export function findBraceBlockEnd(lines: string[], startLineIdx: number, maxLines: number = 5000): number {
+export function findBraceBlockEnd(
+  lines: string[],
+  startLineIdx: number,
+  maxLines: number = 5000,
+  startCol: number = 0
+): number {
   let braceCount = 0;
   let started = false;
   let inBlockComment = false;
@@ -52,7 +59,7 @@ export function findBraceBlockEnd(lines: string[], startLineIdx: number, maxLine
       }
     }
 
-    for (let c = 0; c < line.length; c++) {
+    for (let c = j === startLineIdx ? startCol : 0; c < line.length; c++) {
       const ch = line[c];
 
       // 1. Multi-line Block Comment

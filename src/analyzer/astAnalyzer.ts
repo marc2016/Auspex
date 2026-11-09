@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import ignore from 'ignore';
-import type { ParsedFileInfo, ClassInfo, MethodInfo } from './types';
+import { ANALYZER_VERSION, type ParsedFileInfo, type ClassInfo, type MethodInfo } from './types';
 
 export interface CollectFilesOptions {
   respectGitIgnore?: boolean;
@@ -232,6 +232,14 @@ export class AstStructureAnalyzer {
   }
 
   analyzeSource(content: string, relPath: string, lastModifiedAt: number = Date.now()): ParsedFileInfo {
+    return { ...this.parseSource(content, relPath, lastModifiedAt), analyzerVersion: ANALYZER_VERSION };
+  }
+
+  analyzeFile(absolutePath: string, relPath: string): ParsedFileInfo {
+    return { ...this.parseFile(absolutePath, relPath), analyzerVersion: ANALYZER_VERSION };
+  }
+
+  private parseSource(content: string, relPath: string, lastModifiedAt: number): ParsedFileInfo {
     const ext = path.extname(relPath).toLowerCase();
     const lang = CODE_EXTENSIONS[ext];
 
@@ -295,7 +303,7 @@ export class AstStructureAnalyzer {
     };
   }
 
-  analyzeFile(absolutePath: string, relPath: string): ParsedFileInfo {
+  private parseFile(absolutePath: string, relPath: string): ParsedFileInfo {
     let stat: fs.Stats | undefined;
     try {
       stat = fs.statSync(absolutePath);

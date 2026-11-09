@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CodeHealthAnalyzer } from '../src/analyzer/codeHealth';
 import type { MethodInfo, ClassInfo } from '../src/analyzer/types';
+import { JavaScriptExtractor } from '../src/analyzer/extractors/JavaScriptExtractor';
 
 describe('CodeHealthAnalyzer', () => {
   const analyzer = new CodeHealthAnalyzer();
@@ -224,5 +225,59 @@ describe('CodeHealthAnalyzer', () => {
     const finding = result.biomarkers.find((b) => b.functionName === 'Top-Level Script');
     expect(finding).toBeDefined();
   });
-});
 
+  describe('constructor containers', () => {
+    const extractor = new JavaScriptExtractor();
+    const constructorWithMethods = (count: number): string[] => {
+      const lines = ['function Cart() {'];
+      for (let i = 0; i < count; i++) {
+        lines.push(`  this.m${i} = function () {`, '    return 1;', '  };');
+      }
+      lines.push('}');
+      return lines;
+    };
+
+    it('labels the large-class biomarker of an oversized constructor as Constructor', () => {
+      const lines = constructorWithMethods(16);
+      const { classes, methods } = extractor.extractStructures(lines, 'javascript');
+      expect(classes[0].kind).toBe('constructor');
+
+      const result = analyzer.analyzeFile(lines, methods, classes, 'javascript');
+      const brainCls = result.biomarkers.find((b) => b.type === 'brain_class');
+      expect(brainCls?.details).toContain("Constructor 'Cart'");
+    });
+
+    it('uses class thresholds instead of component thresholds', () => {
+      // 12 methods would trigger the component threshold but not the class threshold
+      const lines = constructorWithMethods(12);
+      const { classes, methods } = extractor.extractStructures(lines, 'javascript');
+      const result = analyzer.analyzeFile(lines, methods, classes, 'javascript');
+      expect(result.biomarkers.find((b) => b.type === 'brain_class')).toBeUndefined();
+    });
+
+    it('excludes the lines of constructor methods from the constructor body', () => {
+      const lines = [
+        'function Cart(items) {',
+        '  this.add = function (a) {',
+        '    if (a) {',
+        '      if (a.b) {',
+        '        if (a.b.c) {',
+        '          if (a.b.c.d) {',
+        '            return 1;',
+        '          }',
+        '        }',
+        '      }',
+        '    }',
+        '  };',
+        '}',
+      ];
+      const { classes, methods } = extractor.extractStructures(lines, 'javascript');
+      analyzer.analyzeFile(lines, methods, classes, 'javascript');
+      const body = methods.find((m) => m.name === 'Cart()');
+      const add = methods.find((m) => m.name === 'add()');
+      expect(add?.biomarkers?.some((b) => b.type === 'nested_complexity')).toBe(true);
+      expect(body?.biomarkers ?? []).toHaveLength(0);
+      expect(body?.codeHealth).toBe(10);
+    });
+  });
+});

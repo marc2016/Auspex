@@ -10,6 +10,8 @@ import type {
   ParsedFileInfo,
   JiraIssueInfo,
 } from './types';
+import { ANALYZER_VERSION } from './types';
+import { isReusableFileResult } from './versioning';
 import type { AuspexStorage } from '../storage/cache';
 import { extractJiraKeys } from '../integrations/jira/ticketExtractor';
 import type { JiraClient } from '../integrations/jira/jiraClient';
@@ -147,7 +149,7 @@ export class AuspexPipeline {
 
       let parsed: ParsedFileInfo;
       const cached = cachedFiles[relPath];
-      if (cached && typeof cached.codeHealth === 'number') {
+      if (isReusableFileResult(cached)) {
         let isStale = false;
         try {
           const stat = fs.statSync(absPath);
@@ -222,6 +224,7 @@ export class AuspexPipeline {
       couplingGraph,
       knowledgeSummary,
       authorAliases: options?.authorAliases,
+      analyzerVersion: ANALYZER_VERSION,
     };
 
     if (storage) {

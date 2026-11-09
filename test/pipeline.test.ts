@@ -4,7 +4,7 @@ import path from 'path';
 import os from 'os';
 import { AuspexPipeline } from '../src/analyzer/pipeline';
 import { AuspexStorage } from '../src/storage/cache';
-import type { PipelineProgress } from '../src/analyzer/types';
+import { ANALYZER_VERSION, type PipelineProgress } from '../src/analyzer/types';
 
 describe('AuspexPipeline', () => {
   let tempWorkspace: string;
@@ -161,5 +161,48 @@ describe('AuspexPipeline', () => {
     );
     expect(snap2.totalFiles).toBe(2); // helper.ts is included again
   });
-});
 
+  describe('analyzer version in the file cache', () => {
+    const SENTINEL_LOC = 9999;
+    const tamperIndexEntry = (version: number | undefined) => {
+      const cache = storage.loadFileCache();
+      const entry = cache['src/index.ts'];
+      entry.loc = SENTINEL_LOC;
+      if (version === undefined) delete entry.analyzerVersion;
+      else entry.analyzerVersion = version;
+      storage.saveFileCache(cache);
+    };
+    const indexLoc = (snap: { tree: any }) =>
+      snap.tree.children?.find((c: any) => c.name === 'src')?.children?.find((c: any) => c.name === 'index.ts')?.loc;
+
+    it('records the analyzer version on cached file results and on the snapshot', async () => {
+      const snap = await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
+      expect(snap.analyzerVersion).toBe(ANALYZER_VERSION);
+      const cache = storage.loadFileCache();
+      expect(cache['src/index.ts'].analyzerVersion).toBe(ANALYZER_VERSION);
+      expect(storage.loadSnapshot()?.analyzerVersion).toBe(ANALYZER_VERSION);
+    });
+
+    it('reuses an unchanged file result with the current version', async () => {
+      await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
+      tamperIndexEntry(ANALYZER_VERSION);
+      const snap = await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
+      expect(indexLoc(snap)).toBe(SENTINEL_LOC);
+    });
+
+    it('re-analyzes an unchanged file result from an older version', async () => {
+      await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
+      tamperIndexEntry(ANALYZER_VERSION - 1);
+      const snap = await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
+      expect(indexLoc(snap)).not.toBe(SENTINEL_LOC);
+      expect(storage.loadFileCache()['src/index.ts'].analyzerVersion).toBe(ANALYZER_VERSION);
+    });
+
+    it('re-analyzes a cached file result without version', async () => {
+      await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
+      tamperIndexEntry(undefined);
+      const snap = await pipeline.run(tempWorkspace, storage, undefined, ['ignored_dir']);
+      expect(indexLoc(snap)).not.toBe(SENTINEL_LOC);
+    });
+  });
+});
