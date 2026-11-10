@@ -27,11 +27,17 @@ import {
   layoutRequestFor,
   panIntoView,
   isCursorOutside,
+  loadState,
+  fitTransform,
   type DiagramColorMode,
   type DiagramFocus,
   type FocusDepthOption,
 } from '../utils/callDiagram/view';
 import { createElk } from '../utils/callDiagram/elkFactory';
+import { LoadingOverlay, CanvasMessage } from './LoadingOverlay';
+
+/** Delay before the indicator covers a previous diagram (fast re-layouts do not flash). */
+const RELAYOUT_INDICATOR_DELAY_MS = 300;
 
 interface VsCodeLike {
   postMessage(message: unknown): void;
@@ -101,12 +107,23 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   const transformRef = useRef<d3.ZoomTransform>(d3.zoomIdentity);
   const runnerRef = useRef<LayoutRunner | null>(null);
   const requestRef = useRef(0);
-  const fittedRef = useRef(false);
+  /** A fit was asked for (start, focus or folder change); the next result with a layout takes it. */
+  const fitPendingRef = useRef(true);
+  /** Layout that still has to be fitted (waits while the canvas has no size). */
+  const fitTargetRef = useRef<DiagramLayout | null>(null);
+  /** Request the runner is working on or has answered; a newer one counts as loading already. */
+  const sentReqRef = useRef<unknown>(undefined);
+  const loadStartRef = useRef<number | null>(null);
 
   const [data, setData] = useState<CallDiagramData | null>(null);
   const [layout, setLayout] = useState<DiagramLayout | null>(null);
   const [stage, setStage] = useState<DiagramStage | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** Functions in the running layout (from the layout progress message). */
+  const [functionCount, setFunctionCount] = useState<number | null>(null);
+  /** The last result had no functions to show. */
+  const [settledEmpty, setSettledEmpty] = useState(false);
+  const [canvasSized, setCanvasSized] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<DiagramColorMode>('churn');
   const [hideInferred, setHideInferred] = useState(false);
@@ -127,13 +144,22 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     const runner = createLayoutRunner(
       (msg: DiagramResponse) => {
         if (msg.requestId !== requestRef.current) return; // stale
-        if (msg.type === 'progress') setStage(msg.stage);
-        else if (msg.type === 'error') {
+        if (msg.type === 'progress') {
+          setStage(msg.stage);
+          setFunctionCount(msg.functionCount ?? null);
+        } else if (msg.type === 'error') {
           setStage(null);
           setError(msg.message);
         } else {
+          // Only a result with a layout takes a pending fit (an empty one leaves it pending). A fit
+          // that could not run yet (canvas without size) moves on to the newer layout.
+          if (msg.layout && (fitPendingRef.current || fitTargetRef.current)) {
+            fitPendingRef.current = false;
+            fitTargetRef.current = msg.layout;
+          }
           setStage(null);
           setError(null);
+          setSettledEmpty(msg.layout === null);
           setLayout(msg.layout);
           setSelected((sel) => restoreSelection(sel, msg.layout));
         }
@@ -167,25 +193,33 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   // In focus mode, the traversal depends on the inferred-edge filter; in the scope view it does not
   const focusKey = focus ? `${focus.fnId}|${focus.up}|${focus.down}|${hideInferred}` : '';
 
-  // (Re-)layout on new data, folder restriction or focus; keeps zoom, filters and selection
+  const layoutReq = useMemo(
+    () => layoutRequestFor({ data, focusData, folderPath, focus, hideInferred }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [data, focusData, folderPath, focusKey]
+  );
+
+  // (Re-)layout on new data, folder restriction or focus; keeps filters and selection
   useEffect(() => {
     if (!runnerRef.current) return;
     if (focus && !focusData && !focusDataRequested.current) {
       focusDataRequested.current = true;
       vscode.postMessage({ type: 'requestFocusData' });
     }
-    const req = layoutRequestFor({ data, focusData, folderPath, focus, hideInferred });
-    if (!req) return;
+    if (!layoutReq) return;
     const requestId = ++requestRef.current;
+    sentReqRef.current = layoutReq;
     setStage('model');
-    runnerRef.current.request({ requestId, ...req });
+    setFunctionCount(null);
+    runnerRef.current.request({ requestId, ...layoutReq });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, focusData, folderPath, focusKey]);
+  }, [layoutReq]);
 
-  // Re-fit when entering or leaving focus or switching the focused function
+  // Fit the next layout after entering or leaving focus, switching the focused function or changing
+  // the folder restriction. New data and depth changes keep the viewport.
   useEffect(() => {
-    fittedRef.current = false;
-  }, [focus?.fnId]);
+    fitPendingRef.current = true;
+  }, [focus?.fnId, folderPath]);
 
   const enterFocus = (fnId: string) =>
     setFocus({ fnId, label: functionLabel(focusData ?? data, fnId), up: FOCUS_DEFAULT_DEPTH, down: FOCUS_DEFAULT_DEPTH });
@@ -218,14 +252,14 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     setK(tr.k);
   }, []);
 
-  const fit = useCallback(() => {
+  /** Fits the layout into the canvas; false when that is not possible yet (canvas without size). */
+  const fit = useCallback((): boolean => {
     const el = containerRef.current;
-    if (!el || !layout || !svgRef.current || !zoomRef.current) return;
-    const scale = Math.min(el.clientWidth / layout.width, el.clientHeight / layout.height) * 0.95;
-    const tr = d3.zoomIdentity
-      .translate((el.clientWidth - layout.width * scale) / 2, (el.clientHeight - layout.height * scale) / 2)
-      .scale(scale);
-    d3.select(svgRef.current).call(zoomRef.current.transform, tr);
+    if (!el || !layout || !svgRef.current || !zoomRef.current) return false;
+    const ft = fitTransform(layout.width, layout.height, el.clientWidth, el.clientHeight);
+    if (!ft) return false;
+    d3.select(svgRef.current).call(zoomRef.current.transform, d3.zoomIdentity.translate(ft.x, ft.y).scale(ft.k));
+    return true;
   }, [layout]);
 
   // Pan/zoom: transform applied directly; band/culling state updated on band change and zoom end
@@ -244,13 +278,22 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     d3.select(svgRef.current).call(zoom).on('dblclick.zoom', null);
   }, [updateViewport]);
 
-  // Fit when the first layout (or the first layout after a focus change) arrives
+  // Whether the canvas has a size (a hidden tab may have none); changes only between zero and non-zero
   useEffect(() => {
-    if (layout && !fittedRef.current && stage === null) {
-      fittedRef.current = true;
-      fit();
-    }
-  }, [layout, fit, stage]);
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setCanvasSized(el.clientWidth > 0 && el.clientHeight > 0);
+    update();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Fit the layout that took the pending fit; without a canvas size it waits for the resize observer
+  useEffect(() => {
+    if (layout && stage === null && fitTargetRef.current === layout && fit()) fitTargetRef.current = null;
+  }, [layout, fit, stage, canvasSized]);
 
   // Bring the cursor function into view (only if it is outside the viewport; zoom unchanged)
   const cursorFnId = cursor?.fnId ?? null;
@@ -311,19 +354,22 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   const dimmed = (key: string) => !!highlight && !highlight.nodes.has(key);
   const edgeDimmed = (key: string) => !!highlight && !highlight.edges.has(key);
 
-  const status = error
-    ? `${t.error} ${error}`
-    : stage === 'model'
-      ? t.stageModel
-      : stage === 'layout' || stage === 'edges'
-        ? t.stageLayout
-        : !data
-          ? t.waiting
-          : layout === null
-            ? t.empty
-            : focus && isLargeFocus(layout.focusSize)
-              ? t.focusLarge(layout.focusSize ?? 0)
-              : null;
+  // What the canvas shows. A request that is not handed to the runner yet already counts as loading.
+  const load = loadState({
+    hasData: !!(focus ? focusData : data),
+    focusPending: !!focus && !focusData,
+    stage: stage ?? (layoutReq && layoutReq !== sentReqRef.current ? 'model' : null),
+    error,
+    hasLayout: !!layout,
+    settledEmpty,
+    functionCount,
+  });
+  // The elapsed time starts with the load and spans all of its steps
+  if (load.kind !== 'loading') loadStartRef.current = null;
+  else if (loadStartRef.current === null) loadStartRef.current = Date.now();
+  const stepText = load.kind !== 'loading' ? '' : load.step === 1 ? t.waiting : load.step === 2 ? t.stageModel : t.stageLayout;
+
+  const status = load.kind === 'ready' && focus && layout && isLargeFocus(layout.focusSize) ? t.focusLarge(layout.focusSize ?? 0) : null;
 
   return (
     <div style={styles.root}>
@@ -398,7 +444,7 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
             )}
           </>
         )}
-        <button style={styles.button} onClick={fit} title={t.resetZoom}>
+        <button style={styles.button} onClick={() => fit()} title={t.resetZoom}>
           <Icon path={mdiFitToScreenOutline} size={0.7} />
         </button>
         <span style={styles.legend}>
@@ -526,6 +572,20 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
             </g>
           </g>
         </svg>
+        {load.kind === 'loading' && loadStartRef.current !== null && (
+          <LoadingOverlay
+            key={loadStartRef.current}
+            step={load.step}
+            stepText={stepText}
+            functionCount={load.functionCount}
+            startedAt={loadStartRef.current}
+            delayMs={layout ? RELAYOUT_INDICATOR_DELAY_MS : 0}
+            dim={!!layout}
+            strings={t}
+          />
+        )}
+        {load.kind === 'error' && <CanvasMessage>{`${t.error} ${load.message}`}</CanvasMessage>}
+        {load.kind === 'empty' && <CanvasMessage>{t.empty}</CanvasMessage>}
       </div>
     </div>
   );

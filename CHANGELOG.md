@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **More precise call resolution**: ES imports and `require` of relative modules, `new X()` and TypeScript type annotations are used to resolve calls as certain; built-in method names on objects of unknown type (`map.get()`, `list.push()`, ...) and ambiguous method names no longer create inferred edges, and in ES modules unimported names are not linked to other files. On Auspex itself, inferred edges dropped from 55 % to 4 %. Call counts in CodeLens and the Calls view become smaller but more reliable.
 - **Treemap structure for constructor functions**: methods assigned to `this` were previously shown as nested helpers of the constructor body (`Cart > add()` under `Cart()`); they are now shown as `add()` directly under the `Cart` container. Code Health scores of affected files may change.
 - **Versioned analysis cache**: cached file results and stored snapshots record the analyzer version. Results from an older version are re-analyzed automatically, so the first scan after updating re-parses all files.
+- **Call diagram loading indicator**: while a call diagram loads, the canvas shows a spinner with the current step (1 of 3: waiting for the analysis, building the structure, computing the layout), the number of functions and the elapsed time, instead of a small text in the toolbar. Focus tabs waiting for workspace data show it too. During a re-layout the previous diagram stays visible, dimmed and still pannable; the indicator appears after 0.3 s, so fast updates do not flash. The "no functions" and "layout failed" messages are shown centered in the canvas.
+
+### Fixed
+- **Call diagram**: choosing, changing or clearing the folder restriction fits the view to the new diagram (a small folder no longer appears as tiny boxes in a corner). New analysis results still keep the viewport.
+- **Call diagram**: a layout that finishes while the tab has no size (for example in a background tab) is no longer fitted to zoom 0; the fit runs as soon as the canvas has a size.
+- **Call diagram**: a folder restriction or focus without any functions shows the empty message instead of an empty canvas.
 
 ---
 

@@ -1,5 +1,5 @@
 import type { DiagramLayout, LaidOutNode, RoutedEdge } from './layout';
-import type { DiagramRequest } from './protocol';
+import type { DiagramRequest, DiagramStage } from './protocol';
 import type { CallDiagramData } from '../../../../src/analyzer/calls/diagramData';
 import { getHeatColor } from '../../components/TreemapViewer';
 import { getCodeHealthColor } from '../../components/SystemMapViewer';
@@ -236,4 +236,59 @@ export function panIntoView(box: Rect, view: Rect, margin = 0): { dx: number; dy
 export function isCursorOutside(layout: DiagramLayout | null, fnId: string | null | undefined): boolean {
   if (!layout || !fnId) return false;
   return !layout.nodes.some((n) => n.key === fnId);
+}
+
+// ---- load state and fit -----------------------------------------------------------------------
+
+export type DiagramLoadState =
+  | { kind: 'loading'; step: 1 | 2 | 3; functionCount?: number }
+  | { kind: 'error'; message: string }
+  | { kind: 'empty' }
+  | { kind: 'ready' };
+
+/**
+ * What the canvas shows. A running load wins over an old error or layout; "empty" only after a
+ * result said so. Steps: 1 waiting for analysis or focus data, 2 building the structure, 3 layout.
+ */
+export function loadState(s: {
+  hasData: boolean;
+  /** Focus mode without workspace-wide data yet. */
+  focusPending: boolean;
+  stage: DiagramStage | null;
+  error: string | null;
+  hasLayout: boolean;
+  /** The last result carried no layout (no functions). */
+  settledEmpty: boolean;
+  functionCount?: number | null;
+}): DiagramLoadState {
+  if (s.stage === 'model') return { kind: 'loading', step: 2 };
+  if (s.stage) return { kind: 'loading', step: 3, ...(s.functionCount != null ? { functionCount: s.functionCount } : {}) };
+  if (!s.hasData || s.focusPending) return { kind: 'loading', step: 1 };
+  if (s.error) return { kind: 'error', message: s.error };
+  if (s.hasLayout) return { kind: 'ready' };
+  if (s.settledEmpty) return { kind: 'empty' };
+  return { kind: 'loading', step: 2 }; // request about to start
+}
+
+/** Elapsed time for the loading indicator: "4 s" below one minute, "1:05 min" above. */
+export function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  if (total < 60) return `${total} s`;
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')} min`;
+}
+
+/**
+ * Transform that centers a layout in the canvas with a margin; null while the canvas or the layout
+ * has no size (a fit would give zoom 0).
+ */
+export function fitTransform(
+  layoutWidth: number,
+  layoutHeight: number,
+  canvasWidth: number,
+  canvasHeight: number,
+  padding = 0.95
+): { k: number; x: number; y: number } | null {
+  if (!(layoutWidth > 0 && layoutHeight > 0 && canvasWidth > 0 && canvasHeight > 0)) return null;
+  const k = Math.min(canvasWidth / layoutWidth, canvasHeight / layoutHeight) * padding;
+  return { k, x: (canvasWidth - layoutWidth * k) / 2, y: (canvasHeight - layoutHeight * k) / 2 };
 }

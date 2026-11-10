@@ -1,6 +1,6 @@
 import type { CallDiagramData } from '../../../../src/analyzer/calls/diagramData';
 import { findFolderNode } from '../../../../src/analyzer/calls/diagramData';
-import { buildDiagramModel } from './model';
+import { buildDiagramModel, functionNodes } from './model';
 import { computeFocus, type FocusResult } from '../../../../src/analyzer/calls/focus';
 import { computeDiagramLayout, type DiagramLayout, type ElkLike } from './layout';
 
@@ -16,7 +16,8 @@ export interface DiagramRequest {
 export type DiagramStage = 'model' | 'layout' | 'edges';
 
 export type DiagramResponse =
-  | { requestId: number; type: 'progress'; stage: DiagramStage }
+  /** functionCount: functions being laid out (only with stage 'layout'). */
+  | { requestId: number; type: 'progress'; stage: DiagramStage; functionCount?: number }
   | { requestId: number; type: 'result'; layout: DiagramLayout | null }
   | { requestId: number; type: 'error'; message: string };
 
@@ -48,11 +49,13 @@ export async function handleDiagramRequest(
       data = { ...req.data, callGraph: { ...req.data.callGraph, edges: focus.edges } };
     }
     const model = buildDiagramModel(data, focus ? { functions: focus.functions } : {});
-    if (!model) {
+    // Count after scope, folder restriction and focus: this is what the layout has to place
+    const functionCount = model ? functionNodes(model).length : 0;
+    if (!model || functionCount === 0) {
       post({ requestId: req.requestId, type: 'result', layout: null });
       return;
     }
-    post({ requestId: req.requestId, type: 'progress', stage: 'layout' });
+    post({ requestId: req.requestId, type: 'progress', stage: 'layout', functionCount });
     const layout = await computeDiagramLayout(data, model, elk);
     if (focus) {
       layout.boundary = focus.boundary;

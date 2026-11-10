@@ -38,6 +38,32 @@ describe('diagram worker protocol', () => {
     expect(result?.type === 'result' && result.layout?.stubs).toEqual({ 'src/a/a.js#a': 1 });
   });
 
+  it('sends the number of laid-out functions with the layout progress', async () => {
+    const countFor = async (req: Partial<Parameters<typeof handleDiagramRequest>[0]>) => {
+      const messages: DiagramResponse[] = [];
+      await handleDiagramRequest({ requestId: 1, data, ...req }, (m) => messages.push(m), elk);
+      const progress = messages.find((m) => m.type === 'progress' && m.stage === 'layout');
+      return progress?.type === 'progress' ? progress.functionCount : undefined;
+    };
+    expect(await countFor({})).toBe(2);
+    expect(await countFor({ folderPath: 'src/a' })).toBe(1);
+  });
+
+  it('returns no layout when the request contains no functions', async () => {
+    const messages: DiagramResponse[] = [];
+    const withEmpty = [...files, parseJsWithCalls('src/c/c.js', ['var x = 1;'])];
+    const built = new TreeAggregator().buildTree(withEmpty, new Map());
+    const emptyFolder = buildCallDiagramData(
+      { ...snapshot, tree: built.tree, hotspots: built.hotspots, callGraph: new CallGraphBuilder().build(withEmpty) },
+      ''
+    );
+    await handleDiagramRequest({ requestId: 4, data: emptyFolder, folderPath: 'src/c' }, (m) => messages.push(m), elk);
+    expect(messages).toEqual([
+      { requestId: 4, type: 'progress', stage: 'model' },
+      { requestId: 4, type: 'result', layout: null },
+    ]);
+  });
+
   it('returns null without a tree and reports errors', async () => {
     const messages: DiagramResponse[] = [];
     await handleDiagramRequest({ requestId: 1, data: { ...data, tree: null } }, (m) => messages.push(m), elk);
@@ -110,6 +136,26 @@ describe('focus requests', () => {
       'src/store/store.js#persist': { hiddenCallers: 0, hiddenCallees: 1 },
     });
     expect(result.layout.focusSize).toBe(3);
+  });
+
+  it('counts only the functions of the focus in the layout progress', async () => {
+    const messages: DiagramResponse[] = [];
+    await handleDiagramRequest(
+      { requestId: 1, data: wsData, focus: { fnId: 'src/cart/cart.js#add', up: 1, down: 1, includeInferred: true } },
+      (m) => messages.push(m),
+      elk
+    );
+    expect(messages[1]).toEqual({ requestId: 1, type: 'progress', stage: 'layout', functionCount: 3 });
+  });
+
+  it('returns no layout for a focus on an unknown function', async () => {
+    const messages: DiagramResponse[] = [];
+    await handleDiagramRequest(
+      { requestId: 1, data: wsData, focus: { fnId: 'src/nope.js#missing', up: 1, down: 1, includeInferred: true } },
+      (m) => messages.push(m),
+      elk
+    );
+    expect(messages.at(-1)).toEqual({ requestId: 1, type: 'result', layout: null });
   });
 
   it('treats a null depth (Infinity after JSON transport) as all', async () => {

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   zoomBand, aggregationDepth, aggregateEdges, functionColor, neighborsOf, applyFilters, restoreSelection, cullToViewport,
-  panIntoView, isCursorOutside,
+  panIntoView, isCursorOutside, loadState, formatElapsed, fitTransform,
 } from '../webview/src/utils/callDiagram/view';
 import { getHeatColor } from '../webview/src/components/TreemapViewer';
 import { getCodeHealthColor } from '../webview/src/components/SystemMapViewer';
@@ -131,5 +131,73 @@ describe('cursor marker', () => {
     expect(isCursorOutside(layout, 'zz')).toBe(true);
     expect(isCursorOutside(layout, null)).toBe(false);
     expect(isCursorOutside(null, 'zz')).toBe(false);
+  });
+});
+
+describe('load state', () => {
+  const base = { hasData: true, focusPending: false, stage: null, error: null, hasLayout: false, settledEmpty: false } as const;
+
+  it('waits in step 1 without data or without focus data', () => {
+    expect(loadState({ ...base, hasData: false })).toEqual({ kind: 'loading', step: 1 });
+    expect(loadState({ ...base, focusPending: true, hasLayout: true })).toEqual({ kind: 'loading', step: 1 });
+    expect(loadState({ ...base, focusPending: true, settledEmpty: true })).toEqual({ kind: 'loading', step: 1 });
+  });
+
+  it('maps the stages to steps 2 and 3 and carries the function count in step 3', () => {
+    expect(loadState({ ...base, stage: 'model', functionCount: 7 })).toEqual({ kind: 'loading', step: 2 });
+    expect(loadState({ ...base, stage: 'layout', functionCount: 3000 })).toEqual({ kind: 'loading', step: 3, functionCount: 3000 });
+    expect(loadState({ ...base, stage: 'edges' })).toEqual({ kind: 'loading', step: 3 });
+  });
+
+  it('shows step 2 instead of the empty state before the first request started', () => {
+    expect(loadState(base)).toEqual({ kind: 'loading', step: 2 });
+  });
+
+  it('shows empty only after a result without layout', () => {
+    expect(loadState({ ...base, settledEmpty: true })).toEqual({ kind: 'empty' });
+  });
+
+  it('shows an error only while no load is running', () => {
+    expect(loadState({ ...base, error: 'boom', hasLayout: true })).toEqual({ kind: 'error', message: 'boom' });
+    expect(loadState({ ...base, error: 'boom', stage: 'layout' })).toEqual({ kind: 'loading', step: 3 });
+    expect(loadState({ ...base, error: 'boom', stage: 'model' })).toEqual({ kind: 'loading', step: 2 });
+  });
+
+  it('is ready with a layout and keeps loading over a previous layout', () => {
+    expect(loadState({ ...base, hasLayout: true })).toEqual({ kind: 'ready' });
+    expect(loadState({ ...base, hasLayout: true, stage: 'layout', functionCount: 5 })).toEqual({ kind: 'loading', step: 3, functionCount: 5 });
+  });
+});
+
+describe('formatElapsed', () => {
+  it('shows seconds below one minute and m:ss min above', () => {
+    expect(formatElapsed(0)).toBe('0 s');
+    expect(formatElapsed(4200)).toBe('4 s');
+    expect(formatElapsed(59900)).toBe('59 s');
+    expect(formatElapsed(65000)).toBe('1:05 min');
+    expect(formatElapsed(-5)).toBe('0 s');
+  });
+});
+
+describe('fitTransform', () => {
+  it('fits a wide layout to the width and centers it vertically', () => {
+    const t = fitTransform(2000, 500, 1000, 800, 1)!;
+    expect(t.k).toBe(0.5);
+    expect(t.x).toBe(0);
+    expect(t.y).toBe((800 - 250) / 2);
+  });
+
+  it('fits a tall layout to the height and centers it horizontally, with the default margin', () => {
+    const t = fitTransform(500, 2000, 1000, 800)!;
+    expect(t.k).toBeCloseTo(0.4 * 0.95);
+    expect(t.x).toBeCloseTo((1000 - 500 * t.k) / 2);
+    expect(t.y).toBeCloseTo((800 - 2000 * t.k) / 2);
+  });
+
+  it('returns null while the canvas or the layout has no size', () => {
+    expect(fitTransform(1000, 1000, 0, 800)).toBeNull();
+    expect(fitTransform(1000, 1000, 1000, 0)).toBeNull();
+    expect(fitTransform(0, 0, 1000, 800)).toBeNull();
+    expect(fitTransform(1000, 0, 1000, 800)).toBeNull();
   });
 });
