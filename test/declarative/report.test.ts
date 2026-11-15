@@ -11,6 +11,8 @@ const t = {
   rule: (f: string, m: number, r: number) => `${f}: ${m} files, ${r} refs`,
   unresolved: 'Unresolved',
   noUnresolved: 'All resolved.',
+  carriers: 'Carriers:',
+  carrier: (n: string, c: number, d: boolean) => `${n} ${c}${d ? ' *' : ''}`,
 };
 
 describe('declarative report', () => {
@@ -30,6 +32,28 @@ describe('declarative report', () => {
       'TITLE', '', 'Warnings:', '  ! bad rule', '', 'Rules:', '  **/*.form: 2 files, 5 refs', '',
       'Unresolved (2)', '  a.form:9  nope', '  b.form:3  Cart.sav',
     ]);
+  });
+
+  it('lists carriers by count with configured dispatchers marked', () => {
+    const lines = formatDeclarativeReport(
+      {
+        warnings: [],
+        rules: [],
+        unresolved: [],
+        carriers: [
+          { name: 'App.call', count: 3, dispatcher: false },
+          { name: 'invoke', count: 42, dispatcher: true },
+        ],
+      },
+      t
+    );
+    expect(lines).toEqual(['TITLE', '', 'Carriers:', '  invoke 42 *', '  App.call 3', '', 'All resolved.']);
+  });
+
+  it('omits the carrier section without resolved string references', () => {
+    const lines = formatDeclarativeReport({ warnings: [], rules: [], unresolved: [], carriers: [] }, t);
+    expect(lines).not.toContain('Carriers:');
+    expect(hasDeclarativeReport({ warnings: [], rules: [], unresolved: [], carriers: [{ name: 'x', count: 1, dispatcher: false }] })).toBe(true);
   });
 
   it('reports nothing when the feature is not used', () => {

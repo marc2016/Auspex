@@ -41,6 +41,9 @@ export const EXT_STRINGS = {
         `${files}: ${matchedFiles} Dateien, ${references} Verweise`,
       unresolved: 'Nicht aufgelöste Verweise',
       noUnresolved: 'Alle Verweise wurden aufgelöst.',
+      carriers: 'String-Verweise nach Trägerfunktion (in "dispatchers" eintragen für sichere Verweise):',
+      carrier: (name: string, count: number, dispatcher: boolean) =>
+        `${name}: ${count} ${count === 1 ? 'Verweis' : 'Verweise'}${dispatcher ? ' (Dispatcher)' : ''}`,
     },
     statusBarTooltip: (files: number) => `Auspex: ${files} Dateien analysiert. Klicken, um Treemap zu öffnen.`,
     statusBarDefault: 'Klicken, um Auspex Treemap zu öffnen',
@@ -127,6 +130,9 @@ export const EXT_STRINGS = {
         `${files}: ${matchedFiles} files, ${references} references`,
       unresolved: 'Unresolved references',
       noUnresolved: 'All references were resolved.',
+      carriers: 'String references by carrier (add to "dispatchers" for certain references):',
+      carrier: (name: string, count: number, dispatcher: boolean) =>
+        `${name}: ${count} ${count === 1 ? 'reference' : 'references'}${dispatcher ? ' (dispatcher)' : ''}`,
     },
     callCountLens: (callers: number, callees: number) =>
       `${callers} ${callers === 1 ? 'caller' : 'callers'} | ${callees} ${callees === 1 ? 'call' : 'calls'}`,

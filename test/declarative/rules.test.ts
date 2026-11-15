@@ -31,6 +31,16 @@ describe('parseRules', () => {
     expect(warnings).toHaveLength(4);
   });
 
+  it('accepts dispatchers as a string or list and rejects invalid values', () => {
+    const { rules, warnings } = parseRules([
+      { files: 'a', attributes: 'onClick', dispatchers: ['invoke', 'App.call'] },
+      { files: 'b', attributes: 'onClick', dispatchers: 'invoke' },
+      { files: 'c', attributes: 'onClick', dispatchers: 42 },
+    ]);
+    expect(rules.map((r) => r.dispatchers)).toEqual([['invoke', 'App.call'], ['invoke']]);
+    expect(warnings).toEqual([expect.stringContaining('auspex.declarativeReferences[2]')]);
+  });
+
   it('treats a missing setting as no rules and a non-list as a warning', () => {
     expect(parseRules(undefined)).toMatchObject({ rules: [], warnings: [] });
     expect(parseRules({ files: 'x' }).warnings).toHaveLength(1);
@@ -41,6 +51,7 @@ describe('parseRules', () => {
     expect(parseRules([{ files: 'x', attributes: ['a'] }]).hash).toBe(a);
     expect(parseRules([{ files: 'x', attributes: ['a', 'b'] }]).hash).not.toBe(a);
     expect(parseRules([{ files: 'x', attributes: ['a'] }], true).hash).not.toBe(a);
+    expect(parseRules([{ files: 'x', attributes: ['a'], dispatchers: 'invoke' }]).hash).not.toBe(a);
   });
 });
 

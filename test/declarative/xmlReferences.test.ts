@@ -48,13 +48,43 @@ describe('interpretValue', () => {
     expect(interpretValue(' Cart.save ')).toEqual([{ name: 'Cart.save', form: 'qualified' }]);
   });
 
-  it('extracts every called name from expressions, ignoring string literals', () => {
+  it('extracts every called name from expressions, without names inside string literals', () => {
     expect(interpretValue("save(this, 1); track('x')")).toEqual([
       { name: 'save', form: 'expression' },
       { name: 'track', form: 'expression' },
+      { name: 'x', form: 'string', carrier: 'track' },
     ]);
     expect(interpretValue("log('fake(1)'); Cart.save()").map((n) => n.name)).toEqual(['log', 'Cart.save']);
     expect(interpretValue('if (a) { run() }').map((n) => n.name)).toEqual(['run']);
+  });
+
+  it('takes name-like string arguments with their carrier', () => {
+    expect(interpretValue("invoke('Cart.save', this)")).toEqual([
+      { name: 'invoke', form: 'expression' },
+      { name: 'Cart.save', form: 'string', carrier: 'invoke' },
+    ]);
+    expect(interpretValue('App.call("save")').filter((n) => n.form === 'string')).toEqual([
+      { name: 'save', form: 'string', carrier: 'App.call' },
+    ]);
+  });
+
+  it('ignores strings that are not name-like call arguments', () => {
+    expect(interpretValue("show('Order saved!'); x = 'Cart.save'").filter((n) => n.form === 'string')).toEqual([]);
+    expect(interpretValue("run('Cart.' + action)").filter((n) => n.form === 'string')).toEqual([]);
+    expect(interpretValue("if ('Cart.save') go()").filter((n) => n.form === 'string')).toEqual([]);
+  });
+
+  it('uses the innermost call as carrier', () => {
+    expect(interpretValue("run(invoke('Cart.save'))").filter((n) => n.form === 'string')).toEqual([
+      { name: 'Cart.save', form: 'string', carrier: 'invoke' },
+    ]);
+  });
+
+  it('handles escaped quotes and template literals', () => {
+    const strings = (v: string) => interpretValue(v).filter((n) => n.form === 'string').map((n) => n.name);
+    expect(strings("invoke('it\\'s', 'Cart.save')")).toEqual(['Cart.save']);
+    expect(strings('invoke(`Cart.save`)')).toEqual(['Cart.save']);
+    expect(strings('invoke(`Cart.${name}`)')).toEqual([]);
   });
 
   it('ignores non-reference text', () => {
@@ -81,5 +111,34 @@ describe('extractDeclarativeRefs', () => {
       { name: 'validateOrder', line: 3, form: 'name', value: 'validateOrder' },
       { name: 'save', line: 4, form: 'pair', targetFile: 'app/Cart.js', value: 'app/Cart.js#save' },
     ]);
+  });
+
+  it('marks string arguments of configured dispatchers with exact dotted-name matching', () => {
+    const content = `<form>\n  <button onClick="invoke('Cart.save'); App.call('load'); this.invoke('x')"/>\n</form>`;
+    const { rules } = parseRules([{ files: '*', attributes: 'onClick', dispatchers: ['invoke', 'App.call'] }]);
+    const strings = extractDeclarativeRefs(content, rules).filter((r) => r.form === 'string');
+    expect(strings).toEqual([
+      { name: 'Cart.save', line: 2, form: 'string', value: expect.any(String), carrier: 'invoke', dispatcher: true },
+      { name: 'load', line: 2, form: 'string', value: expect.any(String), carrier: 'App.call', dispatcher: true },
+      { name: 'x', line: 2, form: 'string', value: expect.any(String), carrier: 'this.invoke' },
+    ]);
+  });
+
+  it('leaves string arguments unmarked without dispatchers', () => {
+    const { rules } = parseRules([{ files: '*', attributes: 'onClick' }]);
+    const [ref] = extractDeclarativeRefs(`<b onClick="invoke('Cart.save')"/>`, rules).filter((r) => r.form === 'string');
+    expect(ref).toEqual({ name: 'Cart.save', line: 1, form: 'string', value: "invoke('Cart.save')", carrier: 'invoke' });
+  });
+
+  it('upgrades a reference to dispatcher when one of several matching rules names the carrier', () => {
+    const content = `<b onClick="invoke('Cart.save')"/>`;
+    for (const order of [
+      [{ files: '*', attributes: 'onClick' }, { files: '*', attributes: 'onClick', dispatchers: 'invoke' }],
+      [{ files: '*', attributes: 'onClick', dispatchers: 'invoke' }, { files: '*', attributes: 'onClick' }],
+    ]) {
+      const strings = extractDeclarativeRefs(content, parseRules(order).rules).filter((r) => r.form === 'string');
+      expect(strings).toHaveLength(1);
+      expect(strings[0].dispatcher).toBe(true);
+    }
   });
 });

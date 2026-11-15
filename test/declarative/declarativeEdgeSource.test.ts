@@ -92,4 +92,64 @@ describe('resolveTargetFile', () => {
     expect(resolveTargetFile('../lib/util', 'forms/a.form', files)).toBe('lib/util.ts');
     expect(resolveTargetFile('nope.js', 'a.form', files)).toBeUndefined();
   });
+
+  describe('string arguments', () => {
+    const withRules = (raw: unknown[], lines: string[]) => {
+      const parsed = parseRules(raw).rules;
+      const file: ParsedFileInfo = {
+        filePath: 'ui/order.form', classes: [], methods: [], loc: lines.length, fileHash: 'h',
+        declarativeRefs: extractDeclarativeRefs(lines.join('\n'), parsed),
+      };
+      const source = new DeclarativeEdgeSource();
+      const builder = new CallGraphBuilder();
+      builder.register(source);
+      const graph = builder.build([...jsFiles, file]);
+      return { edges: declarative(graph), unresolved: source.lastUnresolved, carriers: source.lastCarriers };
+    };
+    const plain = [{ files: '**/*.form', attributes: ['onClick'] }];
+    const dispatching = [{ files: '**/*.form', attributes: ['onClick'], dispatchers: ['invoke'] }];
+
+    it('creates an inferred edge for a unique name without dispatcher configuration', () => {
+      const { edges } = withRules(plain, ['<form>', `  <b onClick="invoke('Cart.save')"/>`, '</form>']);
+      expect(edges).toEqual([
+        { from: { file: 'ui/order.form', line: 2 }, to: 'app/Cart.js#Cart.save', confidence: 'inferred', source: 'declarative' },
+      ]);
+    });
+
+    it('drops an ambiguous name without dispatcher configuration', () => {
+      const { edges, unresolved } = withRules(plain, [`<b onClick="invoke('render')"/>`]);
+      expect(edges).toEqual([]);
+      expect(unresolved).toEqual([]);
+    });
+
+    it('resolves string arguments of configured dispatchers like written references', () => {
+      const unique = withRules(dispatching, ['<form>', `  <b onClick="invoke('Cart.save')"/>`, '</form>']);
+      expect(unique.edges.map((e) => [e.to, e.confidence])).toEqual([['app/Cart.js#Cart.save', 'certain']]);
+      const ambiguous = withRules(dispatching, [`<b onClick="invoke('render')"/>`]);
+      expect(ambiguous.edges.map((e) => [e.to, e.confidence])).toEqual([
+        ['app/a.js#render', 'inferred'],
+        ['app/b.js#render', 'inferred'],
+      ]);
+    });
+
+    it('reports unresolved dispatcher arguments but not unresolved arguments of other carriers', () => {
+      const dispatcher = withRules(dispatching, ['<form>', `  <b onClick="invoke('Cart.sav')"/>`, '</form>']);
+      expect(dispatcher.unresolved).toEqual([{ file: 'ui/order.form', line: 2, value: "invoke('Cart.sav')" }]);
+      expect(withRules(plain, [`<b onClick="track('click')"/>`]).unresolved).toEqual([]);
+    });
+
+    it('counts per carrier only string references that produced an edge', () => {
+      const { carriers } = withRules(dispatching, [
+        '<form>',
+        `  <b onClick="invoke('Cart.save')"/>`,
+        `  <b onClick="invoke('submitOrder'); invoke('nothing')"/>`,
+        `  <b onClick="track('Cart.save'); log('render')"/>`,
+        '</form>',
+      ]);
+      expect(carriers).toEqual([
+        { name: 'invoke', count: 2, dispatcher: true },
+        { name: 'track', count: 1, dispatcher: false },
+      ]);
+    });
+  });
 });

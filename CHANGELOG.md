@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - References (names, `Container.method`, JS expressions, file/function pairs) become callers in the Calls view and count towards the call CodeLens; ambiguous names are marked as inferred.
   - Rule warnings, per-rule counts and unresolved references are written to the new **Auspex** output channel after each scan.
   - Optional heuristic mode for unconfigured XML-like files (`auspex.declarativeReferences.heuristic`, off by default).
+- **String References in XML Files**:
+  - Function names passed as string arguments (`onClick="invoke('Cart.save')"`) become callers; without configuration only if the name matches exactly one function (*inferred*).
+  - New rule property `dispatchers` (e.g. `["invoke", "App.call"]`): string arguments of these functions resolve like written references (*certain* if unique) and unresolved ones are reported.
+  - The **Auspex** output channel lists the carrier functions of string references with counts, marking configured dispatchers.
 
 ### Changed
 - Switching the active editor no longer replaces the function in the Calls view with the file (the view keeps its function).

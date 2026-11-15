@@ -265,5 +265,20 @@ describe('AuspexPipeline', () => {
       await run([{ files: '**/*.form', attributes: ['handler'] }]);
       expect(storage.loadFileCache()['src/index.ts'].loc).toBe(4242);
     });
+
+    it('turns string arguments into declarative edges and lists their carrier', async () => {
+      fs.writeFileSync(path.join(tempWorkspace, 'src', 'cart.js'), ['const Cart = {', '  save() {', '    return 1;', '  },', '};'].join('\n'));
+      fs.writeFileSync(formPath(), ['<form>', `  <button onClick="invoke('Cart.save')"/>`, '</form>'].join('\n'));
+      const edgeTo = (snap: Awaited<ReturnType<typeof run>>) =>
+        snap.callGraph?.edges.filter((e) => e.source === 'declarative' && e.to === 'src/cart.js#Cart.save');
+
+      const plain = await run(rules);
+      expect(edgeTo(plain)?.map((e) => e.confidence)).toEqual(['inferred']);
+      expect(plain.declarativeReport?.carriers).toEqual([{ name: 'invoke', count: 1, dispatcher: false }]);
+
+      const configured = await run([{ ...rules[0], dispatchers: ['invoke'] }]);
+      expect(edgeTo(configured)?.map((e) => e.confidence)).toEqual(['certain']);
+      expect(configured.declarativeReport?.carriers).toEqual([{ name: 'invoke', count: 1, dispatcher: true }]);
+    });
   });
 });

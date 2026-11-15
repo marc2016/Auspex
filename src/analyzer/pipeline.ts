@@ -24,7 +24,8 @@ import type { JiraClient } from '../integrations/jira/jiraClient';
 export function buildDeclarativeReport(
   parsed: ParsedRules,
   files: ParsedFileInfo[],
-  unresolved: DeclarativeReport['unresolved']
+  unresolved: DeclarativeReport['unresolved'],
+  carriers: NonNullable<DeclarativeReport['carriers']> = []
 ): DeclarativeReport {
   const rules = parsed.rules.map((rule) => {
     const matcher = new RuleMatcher([rule]);
@@ -35,7 +36,7 @@ export function buildDeclarativeReport(
       references: matched.reduce((n, f) => n + (f.declarativeRefs?.filter((r) => !r.heuristic).length ?? 0), 0),
     };
   });
-  return { warnings: parsed.warnings, rules, unresolved };
+  return { warnings: parsed.warnings, rules, unresolved, carriers };
 }
 
 export class AuspexPipeline {
@@ -249,7 +250,12 @@ export class AuspexPipeline {
       );
 
     const callGraph = this.callGraphBuilder.build(parsedFiles);
-    const declarativeReport = buildDeclarativeReport(declarativeRules, parsedFiles, this.declarativeSource.lastUnresolved);
+    const declarativeReport = buildDeclarativeReport(
+      declarativeRules,
+      parsedFiles,
+      this.declarativeSource.lastUnresolved,
+      this.declarativeSource.lastCarriers
+    );
 
     if (knowledgeSummary) {
       knowledgeSummary.detectedAuthors = this.churnAnalyzer.lastDetectedAuthors;
