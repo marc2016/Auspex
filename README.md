@@ -103,7 +103,8 @@ Most software metrics focus solely on static complexity (like Lines of Code or c
 ```
 
 - Supported values: a function name (`save`), a qualified name (`Cart.save`), a JS expression (`save(this, 1)` - every called name counts) and a file/function attribute pair on one element. Unique matches are *certain*, ambiguous names create *inferred* references to every candidate.
-- After each scan, rule warnings, per-rule counts and unresolved references are listed in the **Auspex** output channel.
+- Function names passed as **string arguments** are found too, e.g. `onClick="invoke('Cart.save')"`. Without configuration such a string counts only if it matches exactly one function (*inferred*). List the functions that take names as strings in `dispatchers` (written as in the expression, e.g. `"dispatchers": ["invoke", "App.call"]`) to resolve their string arguments like written references (*certain* if unique) and to list typos as unresolved.
+- After each scan, rule warnings, per-rule counts, unresolved references and the functions that carried string references (*carriers*, with counts; configured dispatchers marked) are listed in the **Auspex** output channel. Use the carrier list to decide which functions to add to `dispatchers`.
 - Optional heuristic mode (`auspex.declarativeReferences.heuristic`, off by default) also scans unconfigured XML-like files and keeps only code-like values, always as *inferred*.
 
 ### 🌐 System Architecture Map
@@ -197,7 +198,7 @@ You can customize Auspex in VS Code Settings (`Cmd+,` / `Ctrl+,` → search for 
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | `auspex.ignorePatterns` | `string[]` | `["node_modules", "dist", "build", ".git", "out", "bin", "obj"]` | Glob patterns to exclude from analysis. |
-| `auspex.declarativeReferences` | `object[]` | `[]` | Rules for JS references in XML-based files: `files` (glob or list), `attributes`, `elements`, `fileAttribute` + `functionAttribute`. |
+| `auspex.declarativeReferences` | `object[]` | `[]` | Rules for JS references in XML-based files: `files` (glob or list), `attributes`, `elements`, `fileAttribute` + `functionAttribute`, `dispatchers` (functions whose string arguments name functions). |
 | `auspex.declarativeReferences.heuristic` | `boolean` | `false` | Also scan unconfigured XML-like files for code-like references (always inferred). |
 | `auspex.calls.languageServer` | `string` | `"onDemand"` | Use of language servers for calls: `onDemand` (selected function in the Calls view), `background` (all functions after each scan) or `off` (Auspex resolution only). |
 | `auspex.calls.liveMode` | `boolean` | `true` | Live mode: the Calls view and call diagram tabs follow the function at the text cursor. |

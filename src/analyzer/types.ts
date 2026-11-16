@@ -7,11 +7,23 @@ export interface UnresolvedDeclarativeRef {
   value: string;
 }
 
+/** A call carrying string references to functions in XML-like files. */
+export interface DeclarativeCarrier {
+  /** Carrier as written (`invoke`, `App.call`). */
+  name: string;
+  /** String references it carried that resolved to a known function. */
+  count: number;
+  /** Configured in the `dispatchers` of a rule. */
+  dispatcher: boolean;
+}
+
 export interface DeclarativeReport {
   warnings: string[];
   /** Per rule (in configuration order): matched files and found references. */
   rules: { files: string[]; matchedFiles: number; references: number }[];
   unresolved: UnresolvedDeclarativeRef[];
+  /** Carriers of resolved string references; missing in reports written before carriers existed. */
+  carriers?: DeclarativeCarrier[];
 }
 
 export type NodeType = 'folder' | 'namespace' | 'file' | 'class' | 'method';
@@ -67,7 +79,7 @@ export interface ClassInfo {
  * Increment whenever extractor or analyzer changes alter results for unchanged files,
  * so cached file results and stored snapshots from older versions are re-analyzed.
  */
-export const ANALYZER_VERSION = 5;
+export const ANALYZER_VERSION = 6;
 
 export interface ParsedFileInfo {
   filePath: string;

@@ -7,11 +7,17 @@ export interface DeclarativeReportStrings {
   rule: (files: string, matchedFiles: number, references: number) => string;
   unresolved: string;
   noUnresolved: string;
+  /** Heading of the carrier section. */
+  carriers: string;
+  carrier: (name: string, count: number, dispatcher: boolean) => string;
 }
 
 /** Whether there is anything worth reporting (rules configured, warnings or unresolved references). */
 export function hasDeclarativeReport(report: DeclarativeReport | undefined): report is DeclarativeReport {
-  return !!report && (report.rules.length > 0 || report.warnings.length > 0 || report.unresolved.length > 0);
+  return (
+    !!report &&
+    (report.rules.length > 0 || report.warnings.length > 0 || report.unresolved.length > 0 || (report.carriers?.length ?? 0) > 0)
+  );
 }
 
 /** Text for the "Auspex" output channel. */
@@ -25,6 +31,13 @@ export function formatDeclarativeReport(report: DeclarativeReport, t: Declarativ
   if (report.rules.length > 0) {
     lines.push(t.rules);
     for (const r of report.rules) lines.push(`  ${t.rule(r.files.join(', '), r.matchedFiles, r.references)}`);
+    lines.push('');
+  }
+  const carriers = report.carriers ?? [];
+  if (carriers.length > 0) {
+    lines.push(t.carriers);
+    const sorted = [...carriers].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+    for (const c of sorted) lines.push(`  ${t.carrier(c.name, c.count, c.dispatcher)}`);
     lines.push('');
   }
   if (report.unresolved.length > 0) {

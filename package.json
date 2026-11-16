@@ -2,7 +2,7 @@
   "name": "auspex",
   "displayName": "Auspex - Hotspot Treemap & Behavioral Code Analysis",
   "description": "Interactive code hotspot treemap analyzing Git churn, complexity, and defect ratios directly in VS Code.",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "publisher": "marc2016",
   "engines": {
     "vscode": "^1.90.0"
@@ -405,6 +405,20 @@
               "functionAttribute": {
                 "type": "string",
                 "description": "Attribute naming a function in the file given by fileAttribute."
+              },
+              "dispatchers": {
+                "markdownDescription": "Functions whose string arguments reference JS functions, written as in the expression (e.g. `invoke` for `invoke('Cart.save')`, `App.call`). Their string arguments become certain references; string arguments of other calls are only kept if they match exactly one function.",
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                ]
               }
             }
           }

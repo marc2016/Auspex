@@ -49,6 +49,25 @@ describe('heuristic mode', () => {
     expect(graph.edges[0].confidence).toBe('certain');
   });
 
+  it('takes string arguments in heuristic mode', () => {
+    const analyzer = new AstStructureAnalyzer();
+    analyzer.setDeclarativeRules(parseRules([], true));
+    const { xmlInfo } = graphFor(analyzer, 'v.view', `<?xml version="1.0"?><view action="invoke('Cart.save')"/>`);
+    expect(xmlInfo.declarativeRefs).toContainEqual({
+      name: 'Cart.save', line: 1, form: 'string', value: "invoke('Cart.save')", heuristic: true, carrier: 'invoke',
+    });
+  });
+
+  it('resolves heuristic string arguments only if unique, always inferred', () => {
+    const analyzer = new AstStructureAnalyzer();
+    analyzer.setDeclarativeRules(parseRules([], true));
+    const { graph, unresolved } = graphFor(analyzer, 'v.view', `<?xml version="1.0"?><view action="invoke('Cart.save'); invoke('Cart.nope')"/>`);
+    expect(graph.edges).toEqual([
+      { from: { file: 'v.view', line: 1 }, to: 'app/Cart.js#Cart.save', confidence: 'inferred', source: 'declarative' },
+    ]);
+    expect(unresolved).toEqual([]);
+  });
+
   it('detects XML-like content', () => {
     expect(looksLikeXml('﻿  <?xml version="1.0"?><a/>')).toBe(true);
     expect(looksLikeXml('<form/>')).toBe(true);

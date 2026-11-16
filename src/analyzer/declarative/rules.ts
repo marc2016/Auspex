@@ -13,6 +13,11 @@ export interface DeclarativeRule {
   fileAttribute?: string;
   /** Attribute naming a function in the file given by `fileAttribute`. */
   functionAttribute?: string;
+  /**
+   * Functions (dotted names as written, e.g. `invoke`, `App.call`) whose string arguments reference
+   * JS functions. Only present when non-empty.
+   */
+  dispatchers?: string[];
 }
 
 export interface ParsedRules {
@@ -59,6 +64,11 @@ export function parseRules(raw: unknown, heuristic = false): ParsedRules {
         warnings.push(`${label}: "attributes" and "elements" must be strings or lists of strings.`);
         return;
       }
+      const dispatchers = stringList(r.dispatchers);
+      if (!dispatchers) {
+        warnings.push(`${label}: "dispatchers" must be a string or a list of strings.`);
+        return;
+      }
       const hasFileAttr = r.fileAttribute !== undefined;
       const hasFnAttr = r.functionAttribute !== undefined;
       if (hasFileAttr !== hasFnAttr || (hasFileAttr && (!isNonEmptyString(r.fileAttribute) || !isNonEmptyString(r.functionAttribute)))) {
@@ -76,6 +86,7 @@ export function parseRules(raw: unknown, heuristic = false): ParsedRules {
         ...(hasFileAttr
           ? { fileAttribute: (r.fileAttribute as string).trim(), functionAttribute: (r.functionAttribute as string).trim() }
           : {}),
+        ...(dispatchers.length > 0 ? { dispatchers } : {}),
       });
     });
   }
