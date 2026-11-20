@@ -23,4 +23,4 @@
 
 - [x] 4.1 Add the loading indicator and the two fixes to the `[Unreleased]` section of `CHANGELOG.md`; verify the entries exist under "Changed" and "Fixed".
 - [x] 4.2 Run `npm test`, the type check and the webview build; verify all pass.
-- [ ] 4.3 Manual check in the Extension Development Host: open a workspace diagram before the first scan and during a scan (steps 1 to 3 appear), switch to another tab while a large layout runs and come back (diagram is fitted; note in design.md "Open Questions" whether the hidden tab had size 0), restrict to a small folder and clear it again.
+- [x] 4.3 Manual check in the Extension Development Host: open a workspace diagram before the first scan and during a scan (steps 1 to 3 appear), switch to another tab while a large layout runs and come back (diagram is fitted; note in design.md "Open Questions" whether the hidden tab had size 0), restrict to a small folder and clear it again.
