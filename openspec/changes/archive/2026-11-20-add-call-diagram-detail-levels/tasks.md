@@ -31,7 +31,7 @@
 - [x] 5.1 Describe the detail levels and cycle marking in the "Call Diagram" section of `README.md` and add the feature to the `[Unreleased]` section of `CHANGELOG.md` under "Added"; verify both entries exist.
 - [x] 5.2 Run `npm test`, the type check (`npx tsc --noEmit` for the extension and the webview) and `npm run build`; verify all pass.
 - [x] 5.3 Headless Chromium end-to-end check with the 3,600-function sample at "Files" and "Classes": layout time noticeably below the function level, labels readable when fitted, focus and folder restriction work at both levels; decide the open question on hiding edge labels at far zoom and record the answer in design.md. Keep screenshots in the scratchpad, not in the repository.
-- [ ] 5.4 Manual check in the Extension Development Host: switch levels in a workspace diagram, step through cycles, select a file and a class box (the details view shows the file or class), double-click a class box (file opens at the class).
+- [x] 5.4 Manual check in the Extension Development Host: switch levels in a workspace diagram, step through cycles, select a file and a class box (the details view shows the file or class), double-click a class box (file opens at the class).
 
 ## Workflow follow-up
 
