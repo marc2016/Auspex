@@ -3,7 +3,10 @@ import type { CallFunctionRef } from '../../../../src/analyzer/calls/types';
 import type { CallDiagramData } from '../../../../src/analyzer/calls/diagramData';
 import { compactTree, type CompactedTreeNode } from '../systemMapUtils';
 
-export type DiagramNodeKind = 'root' | 'folder' | 'namespace' | 'file' | 'class' | 'function';
+export type DiagramNodeKind = 'root' | 'folder' | 'namespace' | 'file' | 'class' | 'loose' | 'function';
+
+/** Detail level of a diagram: function boxes, class boxes or file boxes. */
+export type DiagramLevel = 'functions' | 'classes' | 'files';
 
 /** Node of the diagram hierarchy: frames (folder/namespace/file/class) and function leaves. */
 export interface DiagramNode {
@@ -22,6 +25,11 @@ export interface DiagramNode {
   codeHealth?: number;
   churnScore?: number;
   hotspot?: boolean;
+  /**
+   * Set on boxes of the class and file levels: keys of the function leaves the box stands for. Its
+   * presence marks a box leaf (a collapsed class, file or the loose functions of a file).
+   */
+  members?: string[];
 }
 
 const normPath = (p: string) => p.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -98,6 +106,10 @@ export function buildDiagramModel(
       ...(nodeFile ? { file: nodeFile } : {}),
       ...(kind === 'folder' ? { folderPath: normPath(n.path) } : {}),
       ...(kind === 'file' ? { hotspot: hotspots.has(nodeFile!) } : {}),
+      ...(kind === 'file' || kind === 'class'
+        ? { startLine: n.startLine, endLine: n.endLine, loc: n.loc, codeHealth: n.codeHealth, churnScore: n.churnScore }
+        : {}),
+      ...(kind === 'class' && nodeFile ? { hotspot: hotspots.has(nodeFile) } : {}),
     };
   };
 
@@ -116,4 +128,59 @@ export function functionNodes(root: DiagramNode): DiagramNode[] {
   };
   walk(root);
   return out;
+}
+
+/** True for leaves that stand for a group of functions (class, file or loose-functions boxes). */
+export function isBox(n: Pick<DiagramNode, 'members'>): boolean {
+  return n.members !== undefined;
+}
+
+/**
+ * Collapses a model to a detail level. At `files`, every file frame becomes a leaf; at `classes`, the
+ * outermost class below a file becomes a leaf (nested containers are merged into it) and the function
+ * leaves directly in a file form one `loose` leaf per file. Leaves get the keys of the functions they
+ * replace as `members`. File frames without functions (declarative callers) become leaves without
+ * members at both levels. At `functions` the model is returned unchanged.
+ */
+export function collapseModel(model: DiagramNode, level: DiagramLevel): DiagramNode {
+  if (level === 'functions') return model;
+  const leaf = (n: DiagramNode, kind: DiagramNodeKind = n.kind, extra: Partial<DiagramNode> = {}): DiagramNode => ({
+    ...n,
+    kind,
+    children: [],
+    members: functionNodes(n).map((f) => f.key),
+    ...extra,
+  });
+  const collapseFile = (file: DiagramNode): DiagramNode => {
+    if (level === 'files' || file.children.length === 0) return leaf(file);
+    const loose = file.children.filter((c) => c.kind === 'function');
+    const children = file.children.filter((c) => c.kind !== 'function').map(collapseInFile);
+    if (loose.length > 0) {
+      const fileHotspot = file.hotspot;
+      children.unshift({
+        key: `loose:${file.file ?? file.key}`,
+        kind: 'loose',
+        name: file.name,
+        children: [],
+        file: file.file,
+        loc: loose.reduce((sum, f) => sum + (f.loc ?? 0), 0),
+        codeHealth: file.codeHealth,
+        churnScore: file.churnScore,
+        hotspot: fileHotspot,
+        members: loose.map((f) => f.key),
+      });
+    }
+    return { ...file, children };
+  };
+  // Below a file at the class level: the first class reached is the box, namespaces stay frames
+  const collapseInFile = (n: DiagramNode): DiagramNode => {
+    if (n.kind === 'class') return leaf(n);
+    if (n.kind === 'function') return n;
+    return { ...n, children: n.children.map(collapseInFile) };
+  };
+  const walk = (n: DiagramNode): DiagramNode => {
+    if (n.kind === 'file') return collapseFile(n);
+    return { ...n, children: n.children.map(walk) };
+  };
+  return walk(model);
 }

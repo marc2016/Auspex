@@ -68,9 +68,9 @@ The label while stepping is "cycle i of N (k boxes)", so a large component shows
 
 `DiagramRequest` gets `level: 'functions' | 'classes' | 'files'`. The viewer keeps `level` in state (default `functions`) and adds it to the request. A level change sets the pending fit, like a focus or folder change (pending-fit logic of the previous change). The level is not persisted. A new tab starts at `functions`, as the spec requires.
 
-At the class and file levels the viewer uses the `near` zoom band for boxes at every zoom factor, so labels are always shown and the far-band aggregation (`aggregationDepth`, `aggregateEdges`) is skipped. Edge labels show the count at the midpoint of the routed path. Stroke width grows with the log of the count, as in today's far band.
+At the class and file levels the viewer uses the `near` zoom band for boxes at every zoom factor, so labels are always shown and the far-band aggregation (`aggregationDepth`, `aggregateEdges`) is skipped. Edge labels show the count at the midpoint of the routed path, about 10px on screen but capped in diagram units (see Open Questions). Stroke width grows with the log of the count, as in today's far band.
 
-Box sizes reuse `functionNodeSize(name, loc)`. Its height cap keeps large files from dominating.
+Box sizes reuse `functionNodeSize(name, loc)`. Its height cap keeps large files from dominating. A loose-functions box is sized for its label with the longest suffix of all languages ("(Funktionen)").
 
 The progress message keeps reporting the function count, which still describes the input of the layout step. The loading indicator is unchanged.
 
@@ -96,4 +96,4 @@ At the class and file levels, the hidden caller and callee counts of the focus b
 
 ## Open Questions
 
-- Whether edge labels should be hidden at very far zoom on large file diagrams. Decide after a check with the 3,600-function sample. This is a rendering threshold only.
+- Resolved in task 5.3 (headless Chromium, 3,900-function sample with 600 files): edge labels stay visible at every zoom level, as the spec requires. Their size is about 10px on screen but capped in diagram units, like box labels. With a size fixed on screen, the counts covered the boxes of a fitted 600-file diagram; with the cap they shrink with the diagram far out and are readable again after zooming in. Box labels of a whole 600-file workspace are not readable when it is fitted into 1,400 px. A folder restriction or a little zoom makes them readable. Layout time at the file level was about 1.2 s, compared to 4.5 s at the function level.

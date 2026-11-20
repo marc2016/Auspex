@@ -1,5 +1,6 @@
 import type { DiagramLayout, LaidOutNode, RoutedEdge } from './layout';
 import type { DiagramRequest, DiagramStage } from './protocol';
+import type { DiagramLevel } from './model';
 import type { CallDiagramData } from '../../../../src/analyzer/calls/diagramData';
 import { getHeatColor } from '../../components/TreemapViewer';
 import { getCodeHealthColor } from '../../components/SystemMapViewer';
@@ -107,24 +108,176 @@ export interface VisibleDiagram {
   edges: RoutedEdge[];
 }
 
-/** Applies filters to a laid-out diagram without re-running the layout. */
+/** True for leaves that carry calls: function boxes and the boxes of the class and file levels. */
+export function isLeafBox(n: Pick<LaidOutNode, 'kind' | 'data'>): boolean {
+  return n.kind === 'function' || n.data.members !== undefined;
+}
+
+/** Number of calls an edge stands for (after filters). */
+export function edgeCount(e: Pick<RoutedEdge, 'certainCount' | 'inferredCount'>): number {
+  return e.certainCount + e.inferredCount;
+}
+
+/**
+ * Applies filters to a laid-out diagram without re-running the layout. Hiding inferred edges removes
+ * the inferred calls from every edge (combined edges keep their certain calls, edges left without
+ * calls are hidden); "hotspots only" keeps hotspot boxes, their frames and the edges between them.
+ */
 export function applyFilters(layout: DiagramLayout, filters: DiagramFilters): VisibleDiagram {
-  let edges = filters.hideInferred ? layout.edges.filter((e) => e.confidence !== 'inferred') : layout.edges;
+  let edges = filters.hideInferred
+    ? layout.edges.filter((e) => e.certainCount > 0).map((e) => (e.inferredCount > 0 ? { ...e, inferredCount: 0 } : e))
+    : layout.edges;
   if (!filters.hotspotsOnly) return { nodes: layout.nodes, edges };
 
   const byKey = new Map(layout.nodes.map((n) => [n.key, n]));
   const keep = new Set<string>();
   for (const n of layout.nodes) {
-    if (n.kind !== 'function' || !n.data.hotspot) continue;
+    if (!isLeafBox(n) || !n.data.hotspot) continue;
     let cur: LaidOutNode | undefined = n;
     while (cur && !keep.has(cur.key)) {
       keep.add(cur.key);
       cur = cur.parentKey ? byKey.get(cur.parentKey) : undefined;
     }
   }
-  const isVisibleFunction = (key: string) => keep.has(key) && byKey.get(key)?.kind === 'function';
-  edges = edges.filter((e) => isVisibleFunction(e.fromKey) && isVisibleFunction(e.toKey));
+  const isVisibleLeaf = (key: string) => {
+    const n = byKey.get(key);
+    return keep.has(key) && !!n && isLeafBox(n);
+  };
+  edges = edges.filter((e) => isVisibleLeaf(e.fromKey) && isVisibleLeaf(e.toKey));
   return { nodes: layout.nodes.filter((n) => keep.has(n.key)), edges };
+}
+
+export interface DependencyCycles {
+  /** Box keys of each cycle, sorted by the top, then left edge of the cycle's bounding box. */
+  cycles: string[][];
+  /** Keys of boxes in any cycle. */
+  nodes: Set<string>;
+  /** Keys of visible edges between two boxes of the same cycle. */
+  edges: Set<string>;
+}
+
+/**
+ * Dependency cycles between boxes of the class and file levels: strongly connected components
+ * (Tarjan) of two or more boxes over the visible edges. Function boxes form no cycles.
+ */
+export function findCycles(diagram: VisibleDiagram): DependencyCycles {
+  const boxes = diagram.nodes.filter((n) => n.data.members !== undefined);
+  const result: DependencyCycles = { cycles: [], nodes: new Set(), edges: new Set() };
+  if (boxes.length === 0) return result;
+  const boxKeys = new Set(boxes.map((b) => b.key));
+  const out = new Map<string, string[]>();
+  for (const e of diagram.edges) {
+    if (!boxKeys.has(e.fromKey) || !boxKeys.has(e.toKey) || e.fromKey === e.toKey) continue;
+    (out.get(e.fromKey) ?? out.set(e.fromKey, []).get(e.fromKey)!).push(e.toKey);
+  }
+
+  // Iterative Tarjan (no recursion limit on long dependency chains)
+  let next = 0;
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  const components: string[][] = [];
+  for (const start of boxes.map((b) => b.key)) {
+    if (index.has(start)) continue;
+    const work: { v: string; i: number }[] = [{ v: start, i: 0 }];
+    index.set(start, next);
+    low.set(start, next++);
+    stack.push(start);
+    onStack.add(start);
+    while (work.length) {
+      const frame = work[work.length - 1];
+      const succ = out.get(frame.v) ?? [];
+      if (frame.i < succ.length) {
+        const w = succ[frame.i++];
+        if (!index.has(w)) {
+          index.set(w, next);
+          low.set(w, next++);
+          stack.push(w);
+          onStack.add(w);
+          work.push({ v: w, i: 0 });
+        } else if (onStack.has(w)) {
+          low.set(frame.v, Math.min(low.get(frame.v)!, index.get(w)!));
+        }
+        continue;
+      }
+      work.pop();
+      if (work.length) {
+        const parent = work[work.length - 1].v;
+        low.set(parent, Math.min(low.get(parent)!, low.get(frame.v)!));
+      }
+      if (low.get(frame.v) === index.get(frame.v)) {
+        const comp: string[] = [];
+        let w: string;
+        do {
+          w = stack.pop()!;
+          onStack.delete(w);
+          comp.push(w);
+        } while (w !== frame.v);
+        if (comp.length >= 2) components.push(comp);
+      }
+    }
+  }
+
+  const byKey = new Map(boxes.map((b) => [b.key, b]));
+  const corner = (comp: string[]) => {
+    const ns = comp.map((k) => byKey.get(k)!);
+    return { y: Math.min(...ns.map((n) => n.y0)), x: Math.min(...ns.map((n) => n.x0)) };
+  };
+  const sorted = components
+    .map((c) => ({ c: [...c].sort(), at: corner(c) }))
+    .sort((a, b) => a.at.y - b.at.y || a.at.x - b.at.x)
+    .map((x) => x.c);
+  const compOf = new Map<string, number>();
+  sorted.forEach((c, i) => c.forEach((k) => compOf.set(k, i)));
+  result.cycles = sorted;
+  result.nodes = new Set(compOf.keys());
+  for (const e of diagram.edges) {
+    const a = compOf.get(e.fromKey);
+    if (a !== undefined && a === compOf.get(e.toKey) && e.fromKey !== e.toKey) result.edges.add(e.key);
+  }
+  return result;
+}
+
+/** Bounding box of a set of nodes (diagram coordinates), or null if none is found. */
+export function boundsOf(nodes: LaidOutNode[], keys: Iterable<string>): { x0: number; y0: number; x1: number; y1: number } | null {
+  const set = new Set(keys);
+  const ns = nodes.filter((n) => set.has(n.key));
+  if (ns.length === 0) return null;
+  return {
+    x0: Math.min(...ns.map((n) => n.x0)),
+    y0: Math.min(...ns.map((n) => n.y0)),
+    x1: Math.max(...ns.map((n) => n.x1)),
+    y1: Math.max(...ns.map((n) => n.y1)),
+  };
+}
+
+/**
+ * Maps function keys to the key of the box that contains them (class and file levels). At the
+ * function level every function maps to itself.
+ */
+export function boxOf(layout: DiagramLayout | null): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const n of layout?.nodes ?? []) {
+    if (n.kind === 'function') map.set(n.key, n.key);
+    for (const m of n.data.members ?? []) map.set(m, n.key);
+  }
+  return map;
+}
+
+/** Focus boundary markers per box: hidden callers and callees of its members, summed. */
+export function boundaryByBox(
+  boundary: DiagramLayout['boundary'],
+  boxes: Map<string, string>
+): Record<string, { hiddenCallers: number; hiddenCallees: number }> {
+  const out: Record<string, { hiddenCallers: number; hiddenCallees: number }> = {};
+  for (const [fnKey, b] of Object.entries(boundary ?? {})) {
+    const key = boxes.get(fnKey) ?? fnKey;
+    const cur = (out[key] ??= { hiddenCallers: 0, hiddenCallees: 0 });
+    cur.hiddenCallers += b.hiddenCallers;
+    cur.hiddenCallees += b.hiddenCallees;
+  }
+  return out;
 }
 
 /** Keeps the selection after an update if the selected function still exists. */
@@ -195,7 +348,9 @@ export function layoutRequestFor(state: {
   folderPath: string;
   focus: DiagramFocus | null;
   hideInferred: boolean;
+  level?: DiagramLevel;
 }): Omit<DiagramRequest, 'requestId'> | undefined {
+  const level = state.level && state.level !== 'functions' ? { level: state.level } : {};
   if (state.focus) {
     if (!state.focusData) return undefined;
     return {
@@ -206,10 +361,11 @@ export function layoutRequestFor(state: {
         down: depthToNumber(state.focus.down),
         includeInferred: !state.hideInferred,
       },
+      ...level,
     };
   }
   if (!state.data) return undefined;
-  return { data: state.data, folderPath: state.folderPath || undefined };
+  return { data: state.data, folderPath: state.folderPath || undefined, ...level };
 }
 
 // ---- live mode: cursor marker -----------------------------------------------------------------
@@ -235,7 +391,7 @@ export function panIntoView(box: Rect, view: Rect, margin = 0): { dx: number; dy
 /** True if the function at the cursor has call data but is not part of the laid-out diagram. */
 export function isCursorOutside(layout: DiagramLayout | null, fnId: string | null | undefined): boolean {
   if (!layout || !fnId) return false;
-  return !layout.nodes.some((n) => n.key === fnId);
+  return !boxOf(layout).has(fnId);
 }
 
 // ---- load state and fit -----------------------------------------------------------------------

@@ -126,3 +126,30 @@ describe('treeLookup - findFileNode', () => {
     expect(findFileNode(sampleTree, '')).toBeNull();
   });
 });
+
+import { findNodeAt, findDiagramNode } from '../src/utils/treeLookup';
+
+describe('treeLookup - diagram box selection', () => {
+  const node = (type: TreeNode['type'], path: string, children: TreeNode[] = [], startLine?: number): TreeNode => ({
+    name: path.split('/').pop()!, path, type, value: 1, loc: 1, commitCount: 0, churnScore: 0, fixCount: 0, featCount: 0,
+    refactorCount: 0, linesAdded: 0, linesDeleted: 0, startLine, children,
+  });
+  const add = node('method', 'src/cart/cart.js#Cart.add', [], 2);
+  const cls = node('class', 'src/cart/cart.js#Cart', [node('method', 'src/cart/cart.js#Cart', [], 1), add], 1);
+  const file = node('file', 'src/cart/cart.js', [cls]);
+  const root = node('folder', 'src', [node('folder', 'src/cart', [file])]);
+
+  it('selects the file node for a file box', () => {
+    expect(findDiagramNode(root, 'src/cart/cart.js')).toBe(file);
+  });
+
+  it('selects the class node for a class box with its start line', () => {
+    expect(findDiagramNode(root, 'src/cart/cart.js', 1)).toBe(cls);
+  });
+
+  it('keeps method lookup by start line for function boxes', () => {
+    expect(findNodeAt(file, 2, 'method')).toBe(add);
+    expect(findNodeAt(file, 1, 'method')?.path).toBe('src/cart/cart.js#Cart');
+    expect(findDiagramNode(root, 'src/missing.js')).toBeNull();
+  });
+});

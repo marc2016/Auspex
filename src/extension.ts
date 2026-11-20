@@ -15,7 +15,7 @@ import { AuspexKnowledgeViewProvider } from './providers/KnowledgeViewProvider';
 import { resolveLanguage, EXT_STRINGS } from './i18n';
 import { openFileInEditor } from './utils/navigation';
 import { AuspexGitContentProvider, AUSPEX_GIT_SCHEME } from './utils/gitDiff';
-import { findFileNode } from './utils/treeLookup';
+import { findFileNode, findNodeAt, findDiagramNode } from './utils/treeLookup';
 import { filterSnapshotByScope, filterCallGraphToTree } from './analyzer/scopeFilter';
 import type { AnalysisSnapshot, TreeNode, AuspexScope, ParsedFileInfo } from './analyzer/types';
 import { JiraConfigManager } from './integrations/jira/jiraConfigManager';
@@ -68,12 +68,7 @@ let backgroundCallAnalysis: vscode.CancellationTokenSource | null = null;
 
 /** Method node of a file node starting at a line. */
 function findMethodNodeAt(node: TreeNode, startLine: number): TreeNode | null {
-  if (node.type === 'method' && node.startLine === startLine) return node;
-  for (const child of node.children ?? []) {
-    const found = findMethodNodeAt(child, startLine);
-    if (found) return found;
-  }
-  return null;
+  return findNodeAt(node, startLine, 'method');
 }
 
 let outputChannel: vscode.OutputChannel | null = null;
@@ -358,6 +353,10 @@ export async function activate(context: vscode.ExtensionContext) {
         onFunctionSelected: (filePath, startLine) => {
           const fileNode = latestSnapshot?.tree ? findFileNode(latestSnapshot.tree, filePath) : null;
           const node = fileNode ? findMethodNodeAt(fileNode, startLine) : null;
+          if (node) setSelectedNodeAcrossProviders(node, false);
+        },
+        onNodeSelected: (filePath, startLine) => {
+          const node = latestSnapshot?.tree ? findDiagramNode(latestSnapshot.tree, filePath, startLine) : null;
           if (node) setSelectedNodeAcrossProviders(node, false);
         },
         onScanRequested: () => void runScan(context, workspacePath, true),

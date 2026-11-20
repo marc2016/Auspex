@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { mdiFitToScreenOutline, mdiTarget, mdiClose, mdiPin, mdiPinOffOutline, mdiCrosshairsGps } from '@mdi/js';
+import { mdiFitToScreenOutline, mdiTarget, mdiClose, mdiPin, mdiPinOffOutline, mdiCrosshairsGps, mdiChevronLeft, mdiChevronRight } from '@mdi/js';
 import type { CallDiagramData } from '../../../src/analyzer/calls/diagramData';
 import { WEBVIEW_STRINGS, type Language } from '../i18n';
 import { Icon } from './Icon';
 import { createLayoutRunner, type LayoutRunner } from '../utils/callDiagram/client';
 import type { DiagramResponse, DiagramStage } from '../utils/callDiagram/protocol';
 import type { DiagramLayout, LaidOutNode, RoutedEdge } from '../utils/callDiagram/layout';
+import type { DiagramLevel } from '../utils/callDiagram/model';
 import { FRAME_LABEL_HEIGHT } from '../utils/callDiagram/constants';
 import {
   aggregateEdges,
@@ -29,6 +30,12 @@ import {
   isCursorOutside,
   loadState,
   fitTransform,
+  isLeafBox,
+  edgeCount,
+  findCycles,
+  boundsOf,
+  boxOf,
+  boundaryByBox,
   type DiagramColorMode,
   type DiagramFocus,
   type FocusDepthOption,
@@ -38,6 +45,8 @@ import { LoadingOverlay, CanvasMessage } from './LoadingOverlay';
 
 /** Delay before the indicator covers a previous diagram (fast re-layouts do not flash). */
 const RELAYOUT_INDICATOR_DELAY_MS = 300;
+/** Largest zoom when fitting a cycle (a cycle of two small boxes would otherwise fill the canvas). */
+const CYCLE_FIT_MAX_ZOOM = 1.5;
 
 interface VsCodeLike {
   postMessage(message: unknown): void;
@@ -97,6 +106,23 @@ function frameLabel(n: LaidOutNode, k: number): React.ReactNode {
  */
 const functionLabelSize = (k: number) => (k >= 9 / 13 ? 13 : Math.min(9 / Math.max(k, 0.01), 16));
 
+/** Label size of class and file boxes: always at least about 9px on screen (labels are always shown). */
+const boxLabelSize = (k: number) => (k >= 9 / 13 ? 13 : Math.min(9 / Math.max(k, 0.01), 60));
+
+/**
+ * Edge count label size: about 10px on screen, but capped in diagram units like box labels, so that
+ * far out the counts shrink with the diagram instead of covering the boxes.
+ */
+const edgeLabelSize = (k: number) => Math.min(10 / Math.max(k, 0.01), 40);
+
+/** Midpoint of a routed edge (middle bend point or the middle of a straight segment). */
+function edgeMidpoint(points: [number, number][]): [number, number] {
+  if (points.length % 2 === 1) return points[(points.length - 1) / 2];
+  const a = points[points.length / 2 - 1];
+  const b = points[points.length / 2];
+  return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+}
+
 /** Editor tab "Call Diagram": functions in nested frames, calls flowing top to bottom. */
 export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   const t = WEBVIEW_STRINGS[language].callDiagram;
@@ -138,6 +164,10 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   /** Function at the text cursor (live mode); fnId null = none or not analyzed. */
   const [cursor, setCursor] = useState<{ fnId: string | null; label: string | null } | null>(null);
   const [pinned, setPinned] = useState(false);
+  const [level, setLevel] = useState<DiagramLevel>('functions');
+  /** Cycle the user stepped to (class and file levels); null = none. */
+  const [cycleIndex, setCycleIndex] = useState<number | null>(null);
+  const collapsed = level !== 'functions';
 
   // Layout runner (ELK in its own worker, main-thread fallback)
   useEffect(() => {
@@ -194,9 +224,9 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   const focusKey = focus ? `${focus.fnId}|${focus.up}|${focus.down}|${hideInferred}` : '';
 
   const layoutReq = useMemo(
-    () => layoutRequestFor({ data, focusData, folderPath, focus, hideInferred }),
+    () => layoutRequestFor({ data, focusData, folderPath, focus, hideInferred, level }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, focusData, folderPath, focusKey]
+    [data, focusData, folderPath, focusKey, level]
   );
 
   // (Re-)layout on new data, folder restriction or focus; keeps filters and selection
@@ -215,11 +245,11 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutReq]);
 
-  // Fit the next layout after entering or leaving focus, switching the focused function or changing
-  // the folder restriction. New data and depth changes keep the viewport.
+  // Fit the next layout after entering or leaving focus, switching the focused function, changing
+  // the folder restriction or the detail level. New data and depth changes keep the viewport.
   useEffect(() => {
     fitPendingRef.current = true;
-  }, [focus?.fnId, folderPath]);
+  }, [focus?.fnId, folderPath, level]);
 
   const enterFocus = (fnId: string) =>
     setFocus({ fnId, label: functionLabel(focusData ?? data, fnId), up: FOCUS_DEFAULT_DEPTH, down: FOCUS_DEFAULT_DEPTH });
@@ -295,12 +325,16 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     if (layout && stage === null && fitTargetRef.current === layout && fit()) fitTargetRef.current = null;
   }, [layout, fit, stage, canvasSized]);
 
-  // Bring the cursor function into view (only if it is outside the viewport; zoom unchanged)
+  // Function key -> key of the box showing it (itself at the function level)
+  const boxes = useMemo(() => boxOf(layout), [layout]);
+
+  // Bring the cursor function's box into view (only if it is outside the viewport; zoom unchanged)
   const cursorFnId = cursor?.fnId ?? null;
+  const cursorKey = cursorFnId ? boxes.get(cursorFnId) ?? null : null;
   useEffect(() => {
-    if (!cursorFnId || !layout || stage !== null) return;
+    if (!cursorKey || !layout || stage !== null) return;
     const el = containerRef.current;
-    const box = layout.nodes.find((n) => n.key === cursorFnId);
+    const box = layout.nodes.find((n) => n.key === cursorKey);
     if (!el || !box || !svgRef.current || !zoomRef.current) return;
     const tr = transformRef.current;
     const [x0, y0] = tr.invert([0, 0]);
@@ -308,23 +342,43 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     const delta = panIntoView(box, { x0, y0, x1, y1 }, 24 / tr.k);
     if (!delta) return;
     d3.select(svgRef.current).transition().duration(250).call(zoomRef.current.translateBy, -delta.dx, -delta.dy);
-  }, [cursorFnId, layout, stage]);
+  }, [cursorKey, layout, stage]);
 
   const cursorOutside = !!focus && pinned && isCursorOutside(layout, cursorFnId);
 
   const visible = useMemo(() => (layout ? applyFilters(layout, { hideInferred, hotspotsOnly }) : null), [layout, hideInferred, hotspotsOnly]);
   const nodesByKey = useMemo(() => new Map((layout?.nodes ?? []).map((n) => [n.key, n])), [layout]);
-  const band = zoomBand(k);
-  const highlight = useMemo(() => (selected && visible ? neighborsOf(selected, visible.edges) : null), [selected, visible]);
+  // Class and file boxes are always shown with labels: the far band only applies to functions
+  const band = collapsed ? 'near' : zoomBand(k);
+  const cycles = useMemo(() => (visible && collapsed ? findCycles(visible) : null), [visible, collapsed]);
+  const cycleCount = cycles?.cycles.length ?? 0;
+  // A cycle index that no longer exists (filter, new data, level) is dropped
+  useEffect(() => {
+    if (cycleIndex !== null && cycleIndex >= cycleCount) setCycleIndex(null);
+  }, [cycleIndex, cycleCount]);
+  const activeCycle = cycleIndex !== null && cycles && cycleIndex < cycleCount ? cycles.cycles[cycleIndex] : null;
+  const highlight = useMemo(() => {
+    if (activeCycle && visible) {
+      const members = new Set(activeCycle);
+      const edges = new Set(visible.edges.filter((e) => members.has(e.fromKey) && members.has(e.toKey)).map((e) => e.key));
+      return { nodes: members, edges };
+    }
+    return selected && visible ? neighborsOf(selected, visible.edges) : null;
+  }, [activeCycle, selected, visible]);
+  const boundary = useMemo(
+    () => (collapsed ? boundaryByBox(layout?.boundary, boxes) : layout?.boundary),
+    [collapsed, layout, boxes]
+  );
+  const focusKeyBox = focus ? boxes.get(focus.fnId) ?? focus.fnId : null;
 
   const shownNodes = useMemo(() => {
     if (!visible) return [];
     // frames smaller than a few pixels on screen are skipped; functions only outside the far band
     const base = visible.nodes.filter((n) =>
-      n.kind === 'function' ? band !== 'far' : (n.x1 - n.x0) * k >= 12 && (n.y1 - n.y0) * k >= 8
+      isLeafBox(n) ? collapsed || band !== 'far' : (n.x1 - n.x0) * k >= 12 && (n.y1 - n.y0) * k >= 8
     );
     return viewport ? cullToViewport(base, viewport) : base;
-  }, [visible, band, viewport]);
+  }, [visible, band, viewport, collapsed]);
 
   // Only edges with at least one visible end are drawn (keeps panning smooth on large diagrams)
   const shownEdges = useMemo(() => {
@@ -339,16 +393,46 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
 
   const light = isLightTheme();
 
-  const onFunctionClick = (n: LaidOutNode) => {
+  const onBoxClick = (n: LaidOutNode) => {
     setSelected((sel) => (sel === n.key ? null : n.key));
-    if (n.data.file && n.data.startLine) {
-      vscode.postMessage({ type: 'functionSelected', filePath: n.data.file, startLine: n.data.startLine });
+    setCycleIndex(null);
+    if (!n.data.file) return;
+    if (n.kind === 'function') {
+      if (n.data.startLine) vscode.postMessage({ type: 'functionSelected', filePath: n.data.file, startLine: n.data.startLine });
+    } else if (n.kind === 'class' && n.data.startLine) {
+      vscode.postMessage({ type: 'nodeSelected', filePath: n.data.file, startLine: n.data.startLine });
+    } else {
+      vscode.postMessage({ type: 'nodeSelected', filePath: n.data.file });
     }
   };
-  const onFunctionDoubleClick = (n: LaidOutNode) => {
-    if (n.data.file && n.data.startLine) {
+  const onBoxDoubleClick = (n: LaidOutNode) => {
+    if (!n.data.file) return;
+    if ((n.kind === 'function' || n.kind === 'class') && n.data.startLine) {
       vscode.postMessage({ type: 'openFile', filePath: n.data.file, startLine: n.data.startLine, endLine: n.data.endLine ?? n.data.startLine });
+    } else if (n.kind !== 'function') {
+      vscode.postMessage({ type: 'openFile', filePath: n.data.file });
     }
+  };
+
+  /** Steps to the previous or next cycle, fits the view to its boxes and highlights them. */
+  const stepCycle = (dir: 1 | -1) => {
+    if (!cycles || cycleCount === 0 || !layout) return;
+    const next = cycleIndex === null ? (dir === 1 ? 0 : cycleCount - 1) : (cycleIndex + dir + cycleCount) % cycleCount;
+    setCycleIndex(next);
+    setSelected(null);
+    const b = boundsOf(layout.nodes, cycles.cycles[next]);
+    const el = containerRef.current;
+    if (!b || !el || !svgRef.current || !zoomRef.current) return;
+    const pad = 40;
+    const ft = fitTransform(b.x1 - b.x0 + 2 * pad, b.y1 - b.y0 + 2 * pad, el.clientWidth, el.clientHeight);
+    if (!ft) return;
+    const kk = Math.min(ft.k, CYCLE_FIT_MAX_ZOOM);
+    const cx = (b.x0 + b.x1) / 2;
+    const cy = (b.y0 + b.y1) / 2;
+    d3.select(svgRef.current)
+      .transition()
+      .duration(300)
+      .call(zoomRef.current.transform, d3.zoomIdentity.translate(el.clientWidth / 2 - cx * kk, el.clientHeight / 2 - cy * kk).scale(kk));
   };
 
   const dimmed = (key: string) => !!highlight && !highlight.nodes.has(key);
@@ -375,6 +459,14 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
     <div style={styles.root}>
       <div style={styles.toolbar}>
         <strong>{t.title}</strong>
+        <label style={styles.check}>
+          {t.level}
+          <select value={level} onChange={(e) => setLevel(e.target.value as DiagramLevel)} style={styles.select} aria-label={t.level}>
+            <option value="functions">{t.levelFunctions}</option>
+            <option value="classes">{t.levelClasses}</option>
+            <option value="files">{t.levelFiles}</option>
+          </select>
+        </label>
         <select value={colorMode} onChange={(e) => setColorMode(e.target.value as DiagramColorMode)} style={styles.select}>
           <option value="churn">{t.colorChurn}</option>
           <option value="health">{t.colorHealth}</option>
@@ -444,6 +536,23 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
             )}
           </>
         )}
+        {collapsed && cycles && (
+          <span style={{ ...styles.check, ...(cycleCount > 0 ? styles.cycleText : {}) }} data-testid="cycle-nav">
+            {cycleCount === 0 ? (
+              t.noCycles
+            ) : (
+              <>
+                <button style={styles.button} onClick={() => stepCycle(-1)} title={t.cyclePrev}>
+                  <Icon path={mdiChevronLeft} size={0.7} />
+                </button>
+                <span>{activeCycle ? t.cycleOf((cycleIndex ?? 0) + 1, cycleCount, activeCycle.length) : t.cycles(cycleCount)}</span>
+                <button style={styles.button} onClick={() => stepCycle(1)} title={t.cycleNext}>
+                  <Icon path={mdiChevronRight} size={0.7} />
+                </button>
+              </>
+            )}
+          </span>
+        )}
         <button style={styles.button} onClick={() => fit()} title={t.resetZoom}>
           <Icon path={mdiFitToScreenOutline} size={0.7} />
         </button>
@@ -451,19 +560,34 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
           <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" style={styles.edgeCertain} /></svg> {t.legendCertain}
           <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" style={{ ...styles.edgeCertain, ...styles.edgeInferred }} /></svg> {t.legendInferred}
           <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" style={{ ...styles.edgeCertain, ...styles.edgeDeclarative }} /></svg> {t.legendDeclarative}
+          {collapsed && (
+            <>
+              <svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" style={{ ...styles.edgeCertain, ...styles.edgeCycle }} /></svg> {t.inCycle}
+            </>
+          )}
         </span>
         {status && <span style={styles.status}>{status}</span>}
       </div>
       <div ref={containerRef} style={styles.canvas}>
-        <svg ref={svgRef} width="100%" height="100%">
+        <svg
+          ref={svgRef}
+          width="100%"
+          height="100%"
+          onClick={(e) => {
+            if (e.target === svgRef.current) setCycleIndex(null);
+          }}
+        >
           <defs>
             <marker id="cd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" fill="var(--vscode-foreground, #cccccc)" />
             </marker>
+            <marker id="cd-arrow-cycle" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" fill={CYCLE_COLOR} />
+            </marker>
           </defs>
           <g ref={gRef} transform={transformRef.current.toString()}>
             {shownNodes
-              .filter((n) => n.kind !== 'function' && n.kind !== 'root')
+              .filter((n) => !isLeafBox(n) && n.kind !== 'root')
               .map((n) => {
                 return (
                   <g key={n.key} opacity={dimmed(n.key) && highlight ? 0.85 : 1}>
@@ -481,18 +605,27 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
               })}
             {band !== 'far' &&
               shownNodes
-                .filter((n) => n.kind === 'function')
+                .filter((n) => isLeafBox(n))
                 .map((n) => {
                   const stub = layout?.stubs[n.key];
+                  const inCycle = !!cycles?.nodes.has(n.key);
+                  const label = n.kind === 'loose' ? t.looseFunctions(n.name) : n.name;
+                  const labelSize = n.kind === 'function' ? functionLabelSize(k) : boxLabelSize(k);
+                  const tip = n.kind === 'function' || n.kind === 'class'
+                    ? `${n.data.file ?? ''}:${n.data.startLine ?? ''}`
+                    : n.kind === 'loose'
+                      ? `${n.data.file ?? ''} - ${t.looseFunctionsHint}`
+                      : n.data.file ?? n.name;
                   return (
                     <g
                       key={n.key}
+                      data-key={n.key}
                       style={{ cursor: 'pointer' }}
-                      opacity={dimmed(n.key) && cursorFnId !== n.key ? 0.2 : 1}
-                      onClick={() => onFunctionClick(n)}
-                      onDoubleClick={() => onFunctionDoubleClick(n)}
+                      opacity={dimmed(n.key) && cursorKey !== n.key ? 0.2 : 1}
+                      onClick={() => onBoxClick(n)}
+                      onDoubleClick={() => onBoxDoubleClick(n)}
                     >
-                      <title>{`${n.data.file ?? ''}:${n.data.startLine ?? ''}`}</title>
+                      <title>{inCycle ? `${tip}\n${t.inCycle}` : tip}</title>
                       <rect
                         x={n.x0}
                         y={n.y0}
@@ -502,11 +635,12 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
                         fill={functionColor(n, colorMode, light)}
                         style={{
                           ...styles.box,
-                          ...(focus?.fnId === n.key ? styles.boxFocus : {}),
+                          ...(inCycle ? styles.boxCycle : {}),
+                          ...(focusKeyBox === n.key ? styles.boxFocus : {}),
                           ...(selected === n.key ? styles.boxSelected : {}),
                         }}
                       />
-                      {cursorFnId === n.key && (
+                      {cursorKey === n.key && (
                         <rect
                           x={n.x0 - 4 / Math.max(k, 0.3)}
                           y={n.y0 - 4 / Math.max(k, 0.3)}
@@ -518,19 +652,19 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
                           <title>{t.cursorHere}</title>
                         </rect>
                       )}
-                      {layout?.boundary?.[n.key]?.hiddenCallers ? (
+                      {boundary?.[n.key]?.hiddenCallers ? (
                         <text x={n.x1 - 2} y={n.y0 - 3} textAnchor="end" style={styles.boundary} fontSize={Math.max(10, 10 / Math.max(k, 0.01))}>
-                          {`+${layout.boundary[n.key].hiddenCallers} \u2191`}
+                          {`+${boundary[n.key].hiddenCallers} \u2191`}
                         </text>
                       ) : null}
-                      {layout?.boundary?.[n.key]?.hiddenCallees ? (
+                      {boundary?.[n.key]?.hiddenCallees ? (
                         <text x={n.x1 - 2} y={n.y1 + Math.max(10, 10 / Math.max(k, 0.01))} textAnchor="end" style={styles.boundary} fontSize={Math.max(10, 10 / Math.max(k, 0.01))}>
-                          {`+${layout.boundary[n.key].hiddenCallees} \u2193`}
+                          {`+${boundary[n.key].hiddenCallees} \u2193`}
                         </text>
                       ) : null}
                       {band === 'near' && (
-                        <text x={n.x0 + 4} y={n.y0 + 4 + functionLabelSize(k)} style={styles.boxLabel} fontSize={functionLabelSize(k)}>
-                          {n.name}
+                        <text x={n.x0 + 4} y={n.y0 + 4 + Math.min(labelSize, 13)} style={styles.boxLabel} fontSize={labelSize}>
+                          {label}
                         </text>
                       )}
                       {band === 'near' && stub ? (
@@ -543,20 +677,30 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
                 })}
             <g style={{ pointerEvents: 'none' }}>
             {band !== 'far' &&
-              shownEdges.map((e) => (
-                <path
-                  key={e.key}
-                  d={edgePath(e, nodesByKey)}
-                  markerEnd="url(#cd-arrow)"
-                  style={{
-                    ...styles.edgeCertain,
-                    ...(e.confidence === 'inferred' ? styles.edgeInferred : {}),
-                    ...(e.source === 'declarative' ? styles.edgeDeclarative : {}),
-                    opacity: edgeDimmed(e.key) ? 0.08 : highlight ? 0.95 : 0.45,
-                    strokeWidth: (highlight && !edgeDimmed(e.key) ? 2 : 1.2) / Math.max(k, 0.3),
-                  }}
-                />
-              ))}
+              shownEdges.map((e) => {
+                const count = edgeCount(e);
+                const inCycle = !!cycles?.edges.has(e.key);
+                const base = collapsed ? Math.min(1 + Math.log2(Math.max(count, 1)), 6) : 1.2;
+                const style = {
+                  ...styles.edgeCertain,
+                  ...(e.confidence === 'inferred' || e.certainCount === 0 ? styles.edgeInferred : {}),
+                  ...(e.source === 'declarative' ? styles.edgeDeclarative : {}),
+                  ...(inCycle ? styles.edgeCycle : {}),
+                  opacity: edgeDimmed(e.key) ? 0.08 : highlight || inCycle ? 0.95 : 0.45,
+                  strokeWidth: (highlight && !edgeDimmed(e.key) ? base + 0.8 : base) / Math.max(k, 0.3),
+                };
+                if (!collapsed) return <path key={e.key} d={edgePath(e, nodesByKey)} markerEnd="url(#cd-arrow)" style={style} />;
+                const [mx, my] = edgeMidpoint(e.points);
+                return (
+                  <g key={e.key} data-edge={e.key} opacity={edgeDimmed(e.key) ? 0.3 : 1}>
+                    <path d={edgePath(e, nodesByKey)} markerEnd={inCycle ? 'url(#cd-arrow-cycle)' : 'url(#cd-arrow)'} style={style} />
+                    <text x={mx + 3 / Math.max(k, 0.3)} y={my} style={{ ...styles.count, ...(inCycle ? styles.cycleText : {}) }} fontSize={edgeLabelSize(k)}>
+                      {count}
+                      <title>{t.callCount(count)}</title>
+                    </text>
+                  </g>
+                );
+              })}
             {band === 'far' &&
               farEdges.map((e) => {
                 const [[x1, y1], [x2, y2]] = e.points;
@@ -591,6 +735,9 @@ export const CallDiagramViewer: React.FC<Props> = ({ language, vscode }) => {
   );
 };
 
+/** Color of dependency cycles (VS Code error color, fixed fallback for both themes). */
+const CYCLE_COLOR = 'var(--vscode-errorForeground, #ef4444)';
+
 const styles: Record<string, React.CSSProperties> = {
   root: { display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', color: 'var(--vscode-foreground, #cccccc)', fontSize: 12 },
   toolbar: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, padding: '6px 10px', borderBottom: '1px solid var(--vscode-panel-border, #3c3c3c)' },
@@ -607,6 +754,9 @@ const styles: Record<string, React.CSSProperties> = {
   box: { stroke: 'rgba(0,0,0,0.35)', strokeWidth: 1, vectorEffect: 'non-scaling-stroke' } as React.CSSProperties,
   boxSelected: { stroke: 'var(--vscode-focusBorder, #007fd4)', strokeWidth: 3 },
   boxFocus: { stroke: 'var(--vscode-foreground, #cccccc)', strokeWidth: 3 },
+  boxCycle: { stroke: CYCLE_COLOR, strokeWidth: 2.5 },
+  edgeCycle: { stroke: CYCLE_COLOR },
+  cycleText: { fill: CYCLE_COLOR, color: CYCLE_COLOR },
   boxCursor: {
     fill: 'none',
     stroke: 'var(--vscode-editorCursor-foreground, #ffcc00)',

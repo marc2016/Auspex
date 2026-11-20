@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Call Diagram detail levels**:
+  - New detail level in every call diagram tab: **Functions** (as before), **Classes** or **Files**. At the class and file levels, classes or files are the boxes and all calls between two boxes are combined into one edge labeled with the number of calls (drawn as inferred only when all of its calls are inferred).
+  - Functions of a file outside any class form one box per file at the class level.
+  - Dependency cycles between classes or files are marked in red; the toolbar counts them and steps from cycle to cycle, fitting the view to each one. Cycles follow the "hide inferred edges" filter.
+  - Folder restriction, focus mode, filters, selection (also of files and classes in the other Auspex views), double-click and the live location marker work at every level.
 - **Constructor Function Detection (JavaScript)**:
   - Functions that assign methods to `this` (`this.add = function`, `this.total = () => {}`, `this.load = async function`) are recognized as **Constructor** containers, regardless of the capitalization of their name, including constructors inside AMD `define()` and IIFE modules.
   - Aliases of `this` (`var self = this; self.remove = function`) are supported, also inside anonymous callbacks.

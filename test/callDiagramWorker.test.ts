@@ -49,6 +49,26 @@ describe('diagram worker protocol', () => {
     expect(await countFor({ folderPath: 'src/a' })).toBe(1);
   });
 
+  it('lays out one box per file at the file level for scope, folder restriction and focus', async () => {
+    const layoutFor = async (req: Partial<Parameters<typeof handleDiagramRequest>[0]>) => {
+      const messages: DiagramResponse[] = [];
+      await handleDiagramRequest({ requestId: 1, data, level: 'files', ...req }, (m) => messages.push(m), elk);
+      const result = messages.find((m) => m.type === 'result');
+      return result?.type === 'result' ? result.layout : null;
+    };
+    const whole = (await layoutFor({}))!;
+    expect(whole.nodes.filter((n) => n.data.members).map((n) => n.key).sort()).toEqual(['file:src/a/a.js', 'file:src/b/b.js']);
+    expect(whole.nodes.some((n) => n.kind === 'function')).toBe(false);
+    expect(whole.edges.map((e) => [e.key, e.certainCount + e.inferredCount])).toEqual([['file:src/a/a.js->file:src/b/b.js', 1]]);
+    const restricted = (await layoutFor({ folderPath: 'src/a' }))!;
+    expect(restricted.nodes.filter((n) => n.data.members).map((n) => n.key)).toEqual(['file:src/a/a.js']);
+    expect(restricted.stubs).toEqual({ 'file:src/a/a.js': 1 });
+    const focused = (await layoutFor({ focus: { fnId: 'src/b/b.js#b', up: 1, down: 0, includeInferred: true } }))!;
+    expect(focused.nodes.filter((n) => n.data.members).map((n) => n.key).sort()).toEqual(['file:src/a/a.js', 'file:src/b/b.js']);
+    const fnLevel = (await layoutFor({ level: 'functions' }))!;
+    expect(fnLevel.nodes.filter((n) => n.kind === 'function')).toHaveLength(2);
+  });
+
   it('returns no layout when the request contains no functions', async () => {
     const messages: DiagramResponse[] = [];
     const withEmpty = [...files, parseJsWithCalls('src/c/c.js', ['var x = 1;'])];

@@ -121,6 +121,18 @@ describe('CallDiagramPanel', () => {
     await panels[0].onMessage({ type: 'openCallDiagram', scopePath: 'src/store' });
     expect(executeCommand).toHaveBeenCalledWith('auspex.openCallDiagram', 'src/store');
   });
+
+  it('forwards the selection of class and file boxes and opens files without a line', async () => {
+    const onNodeSelected = vi.fn();
+    CallDiagramPanel.open({ fsPath: '/ext' } as any, '/ws/shop', '', snapshot, { onNodeSelected });
+    const panel = panels[panels.length - 1];
+    await panel.onMessage({ type: 'nodeSelected', filePath: 'src/cart/cart.js', startLine: 1 });
+    expect(onNodeSelected).toHaveBeenCalledWith('src/cart/cart.js', 1);
+    await panel.onMessage({ type: 'nodeSelected', filePath: 'src/cart/cart.js' });
+    expect(onNodeSelected).toHaveBeenLastCalledWith('src/cart/cart.js', undefined);
+    await panel.onMessage({ type: 'openFile', filePath: 'src/cart/cart.js' });
+    expect(openFileInEditor).toHaveBeenLastCalledWith('/ws/shop', 'src/cart/cart.js', undefined, undefined);
+  });
 });
 
 describe('buildCallDiagramData', () => {

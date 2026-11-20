@@ -28,3 +28,24 @@ export function findFileNode(root: TreeNode, relativeFilePath: string): TreeNode
 
   return search(root);
 }
+
+/** First node of the given type below (or at) `node` that starts at `startLine`. */
+export function findNodeAt(node: TreeNode, startLine: number, type: TreeNode['type']): TreeNode | null {
+  if (node.type === type && node.startLine === startLine) return node;
+  for (const child of node.children ?? []) {
+    const found = findNodeAt(child, startLine, type);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Node selected from a diagram box: the class starting at `startLine` in the file when a line is
+ * given, otherwise the file node itself.
+ */
+export function findDiagramNode(root: TreeNode, filePath: string, startLine?: number): TreeNode | null {
+  const fileNode = findFileNode(root, filePath);
+  if (!fileNode) return null;
+  if (startLine === undefined) return fileNode;
+  return findNodeAt(fileNode, startLine, 'class');
+}

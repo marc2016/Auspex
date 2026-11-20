@@ -20,6 +20,7 @@ const nodes: LaidOutNode[] = [
 ];
 const e = (from: string, to: string, confidence: 'certain' | 'inferred' = 'certain'): RoutedEdge => ({
   key: `${from}->${to}`, fromKey: from, toKey: to, points: [[0, 0], [1, 1]], confidence, source: 'js', self: from === to,
+  certainCount: confidence === 'certain' ? 1 : 0, inferredCount: confidence === 'inferred' ? 1 : 0,
 });
 const edges = [e('a1', 'b1'), e('a2', 'b1', 'inferred'), e('a1', 'a2')];
 const layout: DiagramLayout = { width: 1000, height: 1000, nodes, edges, stubs: {} };

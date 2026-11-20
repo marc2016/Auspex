@@ -17,6 +17,8 @@ export interface CallDiagramFocusTarget {
 export interface CallDiagramCallbacks {
   /** A function box was selected in the diagram (file + start line). */
   onFunctionSelected?: (filePath: string, startLine: number) => void;
+  /** A class box (with its start line) or a file box (without) was selected in a diagram. */
+  onNodeSelected?: (filePath: string, startLine?: number) => void;
   /** The diagram has no data yet and asks for a scan. */
   onScanRequested?: () => void;
 }
@@ -203,6 +205,11 @@ export class CallDiagramPanel {
       case 'functionSelected':
         if (typeof message.filePath === 'string' && typeof message.startLine === 'number') {
           this._callbacks.onFunctionSelected?.(message.filePath, message.startLine);
+        }
+        break;
+      case 'nodeSelected':
+        if (typeof message.filePath === 'string') {
+          this._callbacks.onNodeSelected?.(message.filePath, typeof message.startLine === 'number' ? message.startLine : undefined);
         }
         break;
       case 'openFile':

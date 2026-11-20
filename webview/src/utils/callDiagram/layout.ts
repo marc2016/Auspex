@@ -10,6 +10,8 @@ const FRAME_PADDING = `[top=${FRAME_LABEL_HEIGHT + 4},left=10,bottom=10,right=10
 const NODE_BASE_HEIGHT = 24;
 const NODE_MAX_EXTRA_HEIGHT = 16;
 const CHAR_WIDTH = 7;
+/** Longest label suffix of loose-functions boxes over all languages (sizing only). */
+const LOOSE_LABEL_SUFFIX = '(Funktionen)';
 
 export interface LaidOutNode {
   key: string;
@@ -35,6 +37,9 @@ export interface RoutedEdge {
   confidence: CallConfidence;
   source: CallSourceKind;
   self: boolean;
+  /** Number of `certain` / `inferred` calls the edge stands for (1 and 0 or 0 and 1 at the function level). */
+  certainCount: number;
+  inferredCount: number;
 }
 
 export interface DiagramLayout {
@@ -64,37 +69,66 @@ interface CallEdgeRef {
   toKey: string;
   confidence: CallConfidence;
   source: CallSourceKind;
+  /** Number of `certain` / `inferred` calls (caller/callee pairs) the edge stands for. */
+  certainCount: number;
+  inferredCount: number;
 }
 
-/** Call edges between diagram nodes; callees outside the diagram become stub counts. */
+/**
+ * Call edges between diagram nodes; callees outside the diagram become stub counts. Functions are
+ * mapped to the box that contains them (class and file levels), all calls between two boxes are
+ * combined into one edge with call counts, and calls within one box are dropped.
+ */
 export function collectDiagramEdges(
   data: CallDiagramData,
   model: DiagramNode
 ): { edges: CallEdgeRef[]; stubs: Record<string, number> } {
-  const keys = new Set<string>();
+  const owner = new Map<string, string>();
   const fileFrame = new Map<string, string>();
   const walk = (n: DiagramNode) => {
-    keys.add(n.key);
+    owner.set(n.key, n.key);
+    for (const m of n.members ?? []) owner.set(m, n.key);
     if (n.kind === 'file' && n.file) fileFrame.set(n.file, n.key);
     n.children.forEach(walk);
   };
   walk(model);
+  const collapsed = (function hasBox(n: DiagramNode): boolean {
+    return n.members !== undefined || n.children.some(hasBox);
+  })(model);
 
-  const edges: CallEdgeRef[] = [];
+  const byKey = new Map<string, CallEdgeRef>();
+  const sources = new Map<string, Set<CallSourceKind>>();
   const stubs: Record<string, number> = {};
-  const seen = new Set<string>();
   for (const e of data.callGraph.edges) {
-    const fromKey = typeof e.from === 'string' ? (keys.has(e.from) ? e.from : undefined) : fileFrame.get(e.from.file.replace(/^\/+/, ''));
-    const toKey = keys.has(e.to) ? e.to : undefined;
+    const fromKey = typeof e.from === 'string' ? owner.get(e.from) : fileFrame.get(e.from.file.replace(/^\/+/, ''));
+    const toKey = owner.get(e.to);
     if (fromKey && !toKey && typeof e.from === 'string') {
       stubs[fromKey] = (stubs[fromKey] ?? 0) + 1;
       continue;
     }
     if (!fromKey || !toKey) continue;
+    if (collapsed && fromKey === toKey) continue;
     const key = `${fromKey}->${toKey}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    edges.push({ key, fromKey, toKey, confidence: e.confidence, source: e.source });
+    let edge = byKey.get(key);
+    if (!edge) {
+      edge = { key, fromKey, toKey, confidence: e.confidence, source: e.source, certainCount: 0, inferredCount: 0 };
+      byKey.set(key, edge);
+      sources.set(key, new Set());
+    } else if (!collapsed) {
+      continue; // function level: one edge per caller/callee pair, first edge wins
+    }
+    if (e.confidence === 'certain') edge.certainCount++;
+    else edge.inferredCount++;
+    sources.get(key)!.add(e.source);
+  }
+  const edges = [...byKey.values()];
+  if (collapsed) {
+    for (const edge of edges) {
+      edge.confidence = edge.certainCount > 0 ? 'certain' : 'inferred';
+      const s = sources.get(edge.key)!;
+      // declarative only when all calls are declarative; otherwise a non-declarative source
+      edge.source = s.size === 1 ? [...s][0] : [...s].find((x) => x !== 'declarative') ?? edge.source;
+    }
   }
   return { edges, stubs };
 }
@@ -102,8 +136,10 @@ export function collectDiagramEdges(
 /** ELK graph of the diagram: frames as compound nodes, functions as leaves, calls at the root. */
 export function toElkGraph(model: DiagramNode, edges: CallEdgeRef[]): ElkNode {
   const convert = (n: DiagramNode): ElkNode => {
-    if (n.kind === 'function') {
-      return { id: n.key, ...functionNodeSize(n.name, n.loc) };
+    if (n.kind === 'function' || n.members !== undefined) {
+      // the loose-functions box is labeled "<file> (functions)": size it for the longer label
+      const label = n.kind === 'loose' ? `${n.name} ${LOOSE_LABEL_SUFFIX}` : n.name;
+      return { id: n.key, ...functionNodeSize(label, n.loc) };
     }
     return {
       id: n.key,
